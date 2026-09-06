@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SinusPerpetuum - Pendel Simulation</title>
+    <style>
+      body {
+        background-color: #1a1a1a;
+        color: #ffffff;
+        font-family: sans-serif;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+        margin: 0;
+      }
+      h1 {
+        margin-bottom: 5px;
+        color: #00ffcc;
+      }
+      p {
+        color: #888;
+        margin-bottom: 20px;
+        font-size: 14px;
+      }
+      canvas {
+        background-color: #222;
+        border: 2px solid #444;
+        border-radius: 4px;
+      }
+      .stats {
+        margin-top: 15px;
+        font-family: monospace;
+        font-size: 16px;
+        color: #00ffcc;
+      }
+    </style>
+  </head>
+  <body>
+    <img src="bahn.svg" alt="SinusPerpetuum Bahn" width="1200" />
+    <h1>♾️ SinusPerpetuum (Pendel-Modus)</h1>
+    <p>50mm Kugel rollt über zwei Hügel, stoppt am Rand auf halben Hügeln und pendelt zurück</p>
+
+    <canvas id="trackCanvas" width="1200" height="200"></canvas>
+    <div class="stats" id="statusText">Richtung: Init...</div>
+
+    <script>
+      const canvas = document.getElementById('trackCanvas');
+      const ctx = canvas.getContext('2d');
+      const statusText = document.getElementById('statusText');
+
+      // --- GEOMETRIE (in mm) ---
+      const BLOCK_LENGTH = 1000;
+      const BLOCK_HEIGHT = 80;
+      const WAVE_AMPLITUDE = 10;
+      const BASE_LINE = 60;
+      const BALL_DIAMETER = 50;
+      const BALL_RADIUS = BALL_DIAMETER / 2;
+
+      const SCALE = 1.2;
+      const OFFSET_Y = 50;
+
+      // --- PHYSIK ---
+      let ballX = 5; // Start leicht versetzt auf dem linken halben Hügel
+      let ballSpeedX = 0.0; // Startet aus dem Stillstand
+      const gravity = 0.15;
+      const friction = 0.994; // Geringe Reibung für harmonisches Pendeln
+
+      // Drei Spulen in den Tälern bei 166.6mm, 500mm und 833.3mm
+      const magnetPositions = [166.6, 500.0, 833.3];
+      let activeMagnetIndex = -1;
+
+      // Mathematische Sinuswelle (Cosinus-Form: startet und endet auf Maxima/Hügeln)
+      function getProfileY(x) {
+        return BASE_LINE + WAVE_AMPLITUDE * Math.cos((x * 3 * Math.PI) / BLOCK_LENGTH);
+      }
+
+      // Ableitung für die Hangabtriebskraft
+      function getProfileSlope(x) {
+        return -((WAVE_AMPLITUDE * 3 * Math.PI) / BLOCK_LENGTH) * Math.sin((x * 3 * Math.PI) / BLOCK_LENGTH);
+      }
+
+      function update() {
+        let slope = getProfileSlope(ballX);
+
+        // Schwerkraft beschleunigt/bremst je nach Hanglage
+        ballSpeedX -= slope * gravity;
+        ballSpeedX *= friction;
+
+        // Bidirektionale Magnet-Logik
+        activeMagnetIndex = -1;
+        magnetPositions.forEach((pos, index) => {
+          if (ballSpeedX > 0) {
+            // Von links nach rechts: Spule schaltet ein, wenn Kugel das Tal nach RECHTS verlässt
+            if (ballX >= pos && ballX <= pos + 45) {
+              ballSpeedX += 0.22;
+              activeMagnetIndex = index;
+            }
+          } else if (ballSpeedX < 0) {
+            // Von rechts nach links: Spule schaltet ein, wenn Kugel das Tal nach LINKS verlässt
+            if (ballX <= pos && ballX >= pos - 45) {
+              ballSpeedX -= 0.22;
+              activeMagnetIndex = index;
+            }
+          }
+        });
+
+        // Position bewegen
+        ballX += ballSpeedX;
+
+        // Physikalische Grenzen an den Enden (Reflektion falls die Energie zu hoch wird)
+        if (ballX >= BLOCK_LENGTH) {
+          ballX = BLOCK_LENGTH;
+          ballSpeedX = -0.1; // Richtungswechsel
+        } else if (ballX <= 0) {
+          ballX = 0;
+          ballSpeedX = 0.1; // Richtungswechsel
+        }
+
+        // UI Text
+        let dir = ballSpeedX > 0 ? '➡️ Links nach Rechts' : '⬅️ Rechts nach Links';
+        if (activeMagnetIndex !== -1) {
+          statusText.style.color = '#ff3366';
+          statusText.innerText = `${dir} | ⚡ MAGNET ${activeMagnetIndex + 1} ZÜNDET! ⚡`;
+        } else {
+          statusText.style.color = '#00ffcc';
+          statusText.innerText = `${dir} | V = ${Math.abs(ballSpeedX).toFixed(2)} mm/f`;
+        }
+      }
+
+      function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // 1. Holzblock zeichnen
+        ctx.fillStyle = '#8B5A2B';
+        ctx.beginPath();
+        ctx.moveTo(0, (BLOCK_HEIGHT + OFFSET_Y) * SCALE);
+
+        for (let x = 0; x <= BLOCK_LENGTH; x++) {
+          let y = BLOCK_HEIGHT - getProfileY(x);
+          ctx.lineTo(x * SCALE, (y + OFFSET_Y) * SCALE);
+        }
+
+        ctx.lineTo(BLOCK_LENGTH * SCALE, (BLOCK_HEIGHT + OFFSET_Y) * SCALE);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.strokeStyle = '#5c3a1a';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+
+        // 2. Drei Magnete einzeichnen
+        magnetPositions.forEach((pos, index) => {
+          let magY = BLOCK_HEIGHT - getProfileY(pos);
+          ctx.fillStyle = index === activeMagnetIndex ? '#ff3366' : '#555';
+          ctx.fillRect((pos - 20) * SCALE, (magY + OFFSET_Y + 4) * SCALE, 40 * SCALE, 15 * SCALE);
+        });
+
+        // 3. Kugel zeichnen
+        let ballY = BLOCK_HEIGHT - getProfileY(ballX);
+        ctx.save();
+        ctx.translate(ballX * SCALE, (ballY + OFFSET_Y - BALL_RADIUS) * SCALE);
+
+        let gradient = ctx.createRadialGradient(-5, -5, 2, 0, 0, BALL_RADIUS * SCALE);
+        gradient.addColorStop(0, '#ffffff');
+        gradient.addColorStop(0.3, '#aaaaaa');
+        gradient.addColorStop(1, '#333333');
+        ctx.fillStyle = gradient;
+
+        ctx.beginPath();
+        ctx.arc(0, 0, BALL_RADIUS * SCALE, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+
+      function loop() {
+        update();
+        draw();
+        requestAnimationFrame(loop);
+      }
+
+      loop();
+    </script>
+  </body>
+</html>
