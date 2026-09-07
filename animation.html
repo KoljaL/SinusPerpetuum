@@ -2,186 +2,425 @@
 <html lang="de">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>SinusPerpetuum - Pendel Simulation</title>
+    <title>Präziser 2D Kugel-Simulator (Sinusbahn)</title>
     <style>
       body {
-        background-color: #1a1a1a;
-        color: #ffffff;
         font-family: sans-serif;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        min-height: 100vh;
-        margin: 0;
+        background: #f4f6f9;
+        text-align: center;
+        margin: 10px;
+        color: #333;
       }
-      h1 {
-        margin-bottom: 5px;
-        color: #00ffcc;
-      }
-      p {
-        color: #888;
-        margin-bottom: 20px;
-        font-size: 14px;
+      .container {
+        max-width: 900px;
+        margin: 0 auto;
+        background: white;
+        padding: 20px;
+        border-radius: 12px;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
       }
       canvas {
-        background-color: #222;
-        border: 2px solid #444;
-        border-radius: 4px;
+        background: #fafafa;
+        border: 1px solid #dfe4ec;
+        border-radius: 6px;
+        display: block;
+        margin: 0 auto;
+      }
+      .controls {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 15px;
+        margin-top: 20px;
+        text-align: left;
+      }
+      .control-group {
+        display: flex;
+        flex-direction: column;
+        background: #f8f9fa;
+        padding: 10px 15px;
+        border-radius: 6px;
+        border: 1px solid #e9ecef;
+      }
+      label {
+        font-size: 0.85em;
+        font-weight: bold;
+        margin-bottom: 5px;
+        color: #495057;
+      }
+      input[type='range'] {
+        width: 100%;
       }
       .stats {
-        margin-top: 15px;
         font-family: monospace;
-        font-size: 16px;
-        color: #00ffcc;
+        font-size: 0.9em;
+        background: #333;
+        color: #fff;
+        padding: 10px;
+        border-radius: 6px;
+        margin-top: 15px;
+        display: flex;
+        justify-content: space-around;
+      }
+      .btn-container {
+        grid-column: span 2;
+        display: flex;
+        gap: 10px;
+        justify-content: center;
+        margin-top: 10px;
+      }
+      button {
+        padding: 10px 20px;
+        font-weight: bold;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        transition: background 0.2s;
+      }
+      #startBtn {
+        background: #28a745;
+        color: white;
+      }
+      #startBtn:hover {
+        background: #218838;
+      }
+      #stopBtn {
+        background: #dc3545;
+        color: white;
+      }
+      #stopBtn:hover {
+        background: #c82333;
+      }
+      #resetBtn {
+        background: #007bff;
+        color: white;
+      }
+      #resetBtn:hover {
+        background: #0069d9;
       }
     </style>
   </head>
   <body>
-    <img src="bahn.svg" alt="SinusPerpetuum Bahn" width="1200" />
-    <h1>♾️ SinusPerpetuum (Pendel-Modus)</h1>
-    <p>50mm Kugel rollt über zwei Hügel, stoppt am Rand auf halben Hügeln und pendelt zurück</p>
+    <div class="container">
+      <h2>Präziser 2D Kugel-Simulator (100cm Bahn)</h2>
+      <canvas id="simCanvas" width="850" height="450"></canvas>
 
-    <canvas id="trackCanvas" width="1200" height="200"></canvas>
-    <div class="stats" id="statusText">Richtung: Init...</div>
+      <div class="stats">
+        <span id="statX">Position: 0.0 cm</span>
+        <span id="statV">Geschw.: 0.0 cm/s</span>
+        <span id="statFr">Frequenz: 0.0 Hz</span>
+      </div>
 
+      <div class="controls">
+        <div class="control-group">
+          <label id="lblTilt">Bahn-Neigung: 0.0°</label>
+          <input type="range" id="tilt" min="-10" max="10" step="0.5" value="0" />
+        </div>
+        <div class="control-group">
+          <label id="lblAmp">Amplitude: 2.0 cm</label>
+          <input type="range" id="amp" min="0" max="15" step="0.2" value="2" />
+        </div>
+        <div class="control-group">
+          <label id="lblFreq">Anzahl der Wellenberge: 7</label>
+          <input type="range" id="freq" min="2" max="12" step="1" value="7" />
+        </div>
+        <div class="control-group">
+          <label id="lblSize">Kugel-Durchmesser: 4.8 cm</label>
+          <input type="range" id="size" min="1" max="10" step="0.1" value="4.8" />
+        </div>
+        <div class="control-group">
+          <label id="lblMass">Kugel-Gewicht: 450 g</label>
+          <input type="range" id="mass" min="10" max="1000" step="10" value="450" />
+        </div>
+        <div class="control-group">
+          <label id="lblRoll">Rollreibung (&mu;<sub>R</sub>): 0.0020 (Stahl/Eisen)</label>
+          <input type="range" id="roll" min="0.0010" max="0.0030" step="0.0001" value="0.0020" />
+        </div>
+        <div class="control-group" style="grid-column: span 2">
+          <label id="lblCw">Luftwiderstand (c<sub>w</sub>): 0.47 (Mittelwert Kugel)</label>
+          <input type="range" id="cw" min="0.235" max="0.705" step="0.005" value="0.470" />
+        </div>
+
+        <div class="btn-container">
+          <button id="startBtn">Start</button>
+          <button id="stopBtn">Stop</button>
+          <button id="resetBtn">Reset</button>
+        </div>
+      </div>
+    </div>
     <script>
-      const canvas = document.getElementById('trackCanvas');
+      const canvas = document.getElementById('simCanvas');
       const ctx = canvas.getContext('2d');
-      const statusText = document.getElementById('statusText');
 
-      // --- GEOMETRIE (in mm) ---
-      const BLOCK_LENGTH = 1000;
-      const BLOCK_HEIGHT = 80;
-      const WAVE_AMPLITUDE = 10;
-      const BASE_LINE = 60;
-      const BALL_DIAMETER = 50;
-      const BALL_RADIUS = BALL_DIAMETER / 2;
+      // Physikalische Konstanten & Parameter
+      const g = 981.0; // cm/s^2
+      const rhoAir = 0.0012; // Luftdichte in g/cm^3
+      const trackLengthCm = 100.0;
+      const pixelsPerCm = canvas.width / trackLengthCm;
 
-      const SCALE = 1.2;
-      const OFFSET_Y = 50;
+      let isRunning = false;
 
-      // --- PHYSIK ---
-      let ballX = 5; // Start leicht versetzt auf dem linken halben Hügel
-      let ballSpeedX = 0.0; // Startet aus dem Stillstand
-      const gravity = 0.15;
-      const friction = 0.994; // Geringe Reibung für harmonisches Pendeln
+      // Standard-Vorgaben
+      let tiltDeg = 0;
+      let amplitudeCm = 2.0;
+      let numPeaks = 7;
+      let ballDiameterCm = 4.8;
+      let radiusCm = ballDiameterCm / 2;
+      let massG = 450;
+      let muRoll = 0.002;
+      let cwVal = 0.47;
 
-      // Drei Spulen in den Tälern bei 166.6mm, 500mm und 833.3mm
-      const magnetPositions = [166.6, 500.0, 833.3];
-      let activeMagnetIndex = -1;
+      // Zustand der Kugel
+      let ballX = 0.0;
+      let ballV = 0.0;
 
-      // Mathematische Sinuswelle (Cosinus-Form: startet und endet auf Maxima/Hügeln)
-      function getProfileY(x) {
-        return BASE_LINE + WAVE_AMPLITUDE * Math.cos((x * 3 * Math.PI) / BLOCK_LENGTH);
+      // UI-Elemente verknüpfen
+      const tiltInput = document.getElementById('tilt');
+      const ampInput = document.getElementById('amp');
+      const freqInput = document.getElementById('freq');
+      const sizeInput = document.getElementById('size');
+      const massInput = document.getElementById('mass');
+      const rollInput = document.getElementById('roll');
+      const cwInput = document.getElementById('cw');
+
+      const startBtn = document.getElementById('startBtn');
+      const stopBtn = document.getElementById('stopBtn');
+      const resetBtn = document.getElementById('resetBtn');
+
+      function loadSettings() {
+        if (localStorage.getItem('tiltDeg') !== null) tiltDeg = parseFloat(localStorage.getItem('tiltDeg'));
+        if (localStorage.getItem('amplitudeCm') !== null) amplitudeCm = parseFloat(localStorage.getItem('amplitudeCm'));
+        if (localStorage.getItem('numPeaks') !== null) numPeaks = parseInt(localStorage.getItem('numPeaks'));
+        if (localStorage.getItem('ballDiameterCm') !== null) ballDiameterCm = parseFloat(localStorage.getItem('ballDiameterCm'));
+        if (localStorage.getItem('massG') !== null) massG = parseInt(localStorage.getItem('massG'));
+        if (localStorage.getItem('muRoll') !== null) muRoll = parseFloat(localStorage.getItem('muRoll'));
+        if (localStorage.getItem('cwVal') !== null) cwVal = parseFloat(localStorage.getItem('cwVal'));
+
+        radiusCm = ballDiameterCm / 2;
+
+        tiltInput.value = tiltDeg;
+        ampInput.value = amplitudeCm;
+        freqInput.value = numPeaks;
+        sizeInput.value = ballDiameterCm;
+        massInput.value = massG;
+        rollInput.value = muRoll;
+        cwInput.value = cwVal;
       }
 
-      // Ableitung für die Hangabtriebskraft
-      function getProfileSlope(x) {
-        return -((WAVE_AMPLITUDE * 3 * Math.PI) / BLOCK_LENGTH) * Math.sin((x * 3 * Math.PI) / BLOCK_LENGTH);
+      function saveSettings() {
+        localStorage.setItem('tiltDeg', tiltDeg);
+        localStorage.setItem('amplitudeCm', amplitudeCm);
+        localStorage.setItem('numPeaks', numPeaks);
+        localStorage.setItem('ballDiameterCm', ballDiameterCm);
+        localStorage.setItem('massG', massG);
+        localStorage.setItem('muRoll', muRoll);
+        localStorage.setItem('cwVal', cwVal);
       }
 
-      function update() {
-        let slope = getProfileSlope(ballX);
+      function updateLabels() {
+        document.getElementById('lblTilt').innerText = `Bahn-Neigung: ${tiltDeg.toFixed(1)}°`;
+        document.getElementById('lblAmp').innerText = `Amplitude: ${amplitudeCm.toFixed(1)} cm`;
+        document.getElementById('lblFreq').innerText = `Anzahl der Wellenberge: ${numPeaks}`;
+        document.getElementById('lblSize').innerText = `Kugel-Durchmesser: ${ballDiameterCm.toFixed(1)} cm`;
+        document.getElementById('lblMass').innerText = `Kugel-Gewicht: ${massG} g`;
+        document.getElementById('lblRoll').innerText = `Rollreibung (μR): ${muRoll.toFixed(4)}`;
+        document.getElementById('lblCw').innerText = `Luftwiderstand (cw): ${cwVal.toFixed(3)}`;
+      }
 
-        // Schwerkraft beschleunigt/bremst je nach Hanglage
-        ballSpeedX -= slope * gravity;
-        ballSpeedX *= friction;
+      function resetSimulation() {
+        ballX = radiusCm;
+        ballV = 0.0;
+      }
+      // Event Listener für Regler
+      tiltInput.addEventListener('input', (e) => {
+        tiltDeg = parseFloat(e.target.value);
+        updateLabels();
+        saveSettings();
+      });
+      ampInput.addEventListener('input', (e) => {
+        amplitudeCm = parseFloat(e.target.value);
+        updateLabels();
+        saveSettings();
+      });
+      freqInput.addEventListener('input', (e) => {
+        numPeaks = parseInt(e.target.value);
+        updateLabels();
+        saveSettings();
+        if (!isRunning) resetSimulation();
+      });
+      sizeInput.addEventListener('input', (e) => {
+        ballDiameterCm = parseFloat(e.target.value);
+        radiusCm = ballDiameterCm / 2;
+        updateLabels();
+        saveSettings();
+        if (!isRunning) resetSimulation();
+      });
+      massInput.addEventListener('input', (e) => {
+        massG = parseInt(e.target.value);
+        updateLabels();
+        saveSettings();
+      });
+      rollInput.addEventListener('input', (e) => {
+        muRoll = parseFloat(e.target.value);
+        updateLabels();
+        saveSettings();
+      });
+      cwInput.addEventListener('input', (e) => {
+        cwVal = parseFloat(e.target.value);
+        updateLabels();
+        saveSettings();
+      });
 
-        // Bidirektionale Magnet-Logik
-        activeMagnetIndex = -1;
-        magnetPositions.forEach((pos, index) => {
-          if (ballSpeedX > 0) {
-            // Von links nach rechts: Spule schaltet ein, wenn Kugel das Tal nach RECHTS verlässt
-            if (ballX >= pos && ballX <= pos + 45) {
-              ballSpeedX += 0.22;
-              activeMagnetIndex = index;
-            }
-          } else if (ballSpeedX < 0) {
-            // Von rechts nach links: Spule schaltet ein, wenn Kugel das Tal nach LINKS verlässt
-            if (ballX <= pos && ballX >= pos - 45) {
-              ballSpeedX -= 0.22;
-              activeMagnetIndex = index;
-            }
+      // Event Listener für Control-Buttons
+      startBtn.addEventListener('click', () => {
+        isRunning = true;
+      });
+      stopBtn.addEventListener('click', () => {
+        isRunning = false;
+      });
+      resetBtn.addEventListener('click', () => {
+        isRunning = false;
+        resetSimulation();
+      });
+
+      function getBaseY(x) {
+        let k = ((numPeaks - 1) * Math.PI) / trackLengthCm;
+        return amplitudeCm * Math.cos(k * x);
+      }
+
+      function getBaseSlope(x) {
+        let k = ((numPeaks - 1) * Math.PI) / trackLengthCm;
+        return -amplitudeCm * k * Math.sin(k * x);
+      }
+
+      function rotatePoint(x, y, angleRad) {
+        let cx = trackLengthCm / 2;
+        let cy = 0;
+        return {
+          x: cx + (x - cx) * Math.cos(angleRad) - (y - cy) * Math.sin(angleRad),
+          y: cy + (x - cx) * Math.sin(angleRad) + (y - cy) * Math.cos(angleRad),
+        };
+      }
+
+      function toPixel(worldX, worldY) {
+        return {
+          x: worldX * pixelsPerCm,
+          y: 225 - worldY * pixelsPerCm,
+        };
+      }
+      let lastTime = performance.now();
+
+      function simulationStep() {
+        let now = performance.now();
+        let dt = (now - lastTime) / 1000.0;
+        lastTime = now;
+
+        if (dt > 0.1) dt = 0.1;
+
+        let tiltRad = (tiltDeg * Math.PI) / 180.0;
+
+        if (isRunning) {
+          let baseSlope = getBaseSlope(ballX);
+          let alphaLocal = Math.atan(baseSlope);
+          let totalAngle = alphaLocal + tiltRad;
+
+          // 1. Hangabtriebsbeschleunigung (Trägheitsmoment 5/7 integriert)
+          let accGravity = -(5.0 / 7.0) * g * Math.sin(totalAngle);
+
+          // 2. Rollreibungsbeschleunigung (Stahl auf Eisen)
+          let forceNormal = massG * g * Math.cos(totalAngle);
+          let forceRoll = muRoll * forceNormal;
+          let accRoll = -Math.sign(ballV) * (5.0 / 7.0) * (forceRoll / massG);
+
+          // 3. Luftwiderstandsbeschleunigung (quadratisch mit v)
+          let crossSectionArea = Math.PI * radiusCm * radiusCm;
+          let forceAir = 0.5 * rhoAir * crossSectionArea * cwVal * ballV * ballV;
+          let accAir = -Math.sign(ballV) * (forceAir / massG);
+
+          // Gesamtbeschleunigung
+          let acceleration = accGravity + accRoll + accAir;
+
+          ballV += acceleration * dt;
+          ballX += ballV * dt;
+
+          // Grenzen der Bahn mit Energieverlust
+          if (ballX < radiusCm) {
+            ballX = radiusCm;
+            ballV = -ballV * 0.4;
           }
-        });
-
-        // Position bewegen
-        ballX += ballSpeedX;
-
-        // Physikalische Grenzen an den Enden (Reflektion falls die Energie zu hoch wird)
-        if (ballX >= BLOCK_LENGTH) {
-          ballX = BLOCK_LENGTH;
-          ballSpeedX = -0.1; // Richtungswechsel
-        } else if (ballX <= 0) {
-          ballX = 0;
-          ballSpeedX = 0.1; // Richtungswechsel
+          if (ballX > trackLengthCm - radiusCm) {
+            ballX = trackLengthCm - radiusCm;
+            ballV = -ballV * 0.4;
+          }
         }
 
-        // UI Text
-        let dir = ballSpeedX > 0 ? '➡️ Links nach Rechts' : '⬅️ Rechts nach Links';
-        if (activeMagnetIndex !== -1) {
-          statusText.style.color = '#ff3366';
-          statusText.innerText = `${dir} | ⚡ MAGNET ${activeMagnetIndex + 1} ZÜNDET! ⚡`;
-        } else {
-          statusText.style.color = '#00ffcc';
-          statusText.innerText = `${dir} | V = ${Math.abs(ballSpeedX).toFixed(2)} mm/f`;
-        }
-      }
+        // Live-Werte im UI anzeigen
+        document.getElementById('statX').innerText = `Position: ${ballX.toFixed(1)} cm`;
+        document.getElementById('statV').innerText = `Geschw.: ${ballV.toFixed(1)} cm/s`;
+        let currentWavelength = (trackLengthCm / (numPeaks - 1)) * 2;
+        document.getElementById('statFr').innerText = `Frequenz: ${(Math.abs(ballV) / currentWavelength).toFixed(2)} Hz`;
 
-      function draw() {
+        // --- ZEICHNEN ---
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        // 1. Holzblock zeichnen
-        ctx.fillStyle = '#8B5A2B';
-        ctx.beginPath();
-        ctx.moveTo(0, (BLOCK_HEIGHT + OFFSET_Y) * SCALE);
-
-        for (let x = 0; x <= BLOCK_LENGTH; x++) {
-          let y = BLOCK_HEIGHT - getProfileY(x);
-          ctx.lineTo(x * SCALE, (y + OFFSET_Y) * SCALE);
+        // Gitterlinien
+        ctx.strokeStyle = '#e9ecef';
+        ctx.lineWidth = 1;
+        for (let i = 10; i < 100; i += 10) {
+          let pStart = toPixel(i, -20);
+          let pEnd = toPixel(i, 20);
+          ctx.beginPath();
+          ctx.moveTo(pStart.x, pStart.y);
+          ctx.lineTo(pEnd.x, pEnd.y);
+          ctx.stroke();
         }
 
-        ctx.lineTo(BLOCK_LENGTH * SCALE, (BLOCK_HEIGHT + OFFSET_Y) * SCALE);
-        ctx.closePath();
-        ctx.fill();
-
-        ctx.strokeStyle = '#5c3a1a';
-        ctx.lineWidth = 3;
+        // Bahn zeichnen
+        ctx.beginPath();
+        ctx.strokeStyle = '#4a5568';
+        ctx.lineWidth = 5;
+        for (let x = 0; x <= trackLengthCm; x += 0.5) {
+          let rotP = rotatePoint(x, getBaseY(x), tiltRad);
+          let pixelP = toPixel(rotP.x, rotP.y);
+          if (x === 0) ctx.moveTo(pixelP.x, pixelP.y);
+          else ctx.lineTo(pixelP.x, pixelP.y);
+        }
         ctx.stroke();
 
-        // 2. Drei Magnete einzeichnen
-        magnetPositions.forEach((pos, index) => {
-          let magY = BLOCK_HEIGHT - getProfileY(pos);
-          ctx.fillStyle = index === activeMagnetIndex ? '#ff3366' : '#555';
-          ctx.fillRect((pos - 20) * SCALE, (magY + OFFSET_Y + 4) * SCALE, 40 * SCALE, 15 * SCALE);
-        });
-
-        // 3. Kugel zeichnen
-        let ballY = BLOCK_HEIGHT - getProfileY(ballX);
-        ctx.save();
-        ctx.translate(ballX * SCALE, (ballY + OFFSET_Y - BALL_RADIUS) * SCALE);
-
-        let gradient = ctx.createRadialGradient(-5, -5, 2, 0, 0, BALL_RADIUS * SCALE);
-        gradient.addColorStop(0, '#ffffff');
-        gradient.addColorStop(0.3, '#aaaaaa');
-        gradient.addColorStop(1, '#333333');
-        ctx.fillStyle = gradient;
+        // Kugel zeichnen
+        let baseSlope = getBaseSlope(ballX);
+        let alphaLocal = Math.atan(baseSlope);
+        let ballY = getBaseY(ballX);
+        let offsetX = -radiusCm * Math.sin(alphaLocal);
+        let offsetY = radiusCm * Math.cos(alphaLocal);
+        let ballCenterRot = rotatePoint(ballX + offsetX, ballY + offsetY, tiltRad);
+        let ballPixel = toPixel(ballCenterRot.x, ballCenterRot.y);
+        let radiusPixel = radiusCm * pixelsPerCm;
 
         ctx.beginPath();
-        ctx.arc(0, 0, BALL_RADIUS * SCALE, 0, Math.PI * 2);
+        ctx.arc(ballPixel.x, ballPixel.y, radiusPixel, 0, Math.PI * 2);
+        ctx.fillStyle = '#ff6b6b';
         ctx.fill();
-        ctx.restore();
+        ctx.strokeStyle = '#fa5252';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // Roll-Markierung
+        ctx.beginPath();
+        ctx.moveTo(ballPixel.x, ballPixel.y);
+        let rollAngle = ballX / radiusCm + tiltRad;
+        ctx.lineTo(ballPixel.x + radiusPixel * Math.cos(rollAngle), ballPixel.y - radiusPixel * Math.sin(rollAngle));
+        ctx.strokeStyle = '#ff6b6b';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        requestAnimationFrame(simulationStep);
       }
 
-      function loop() {
-        update();
-        draw();
-        requestAnimationFrame(loop);
-      }
-
-      loop();
+      localStorage.clear();
+      loadSettings();
+      updateLabels();
+      resetSimulation();
+      requestAnimationFrame(simulationStep);
     </script>
   </body>
 </html>

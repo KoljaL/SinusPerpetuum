@@ -57,9 +57,14 @@ const char index_html[] PROGMEM = R"rawliteral(
         .slider { width: 100%; margin-top: 8px; accent-color: var(--accent); }
         .val { font-weight: bold; color: var(--accent); float: right; }
         .grid-status { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; background: var(--surface-alt); padding: 12px; border: 1px solid var(--border); border-radius: 5px; margin-top: 15px; font-size: 15px; }
-        .input-group { margin-top: 15px; display: flex; justify-content: center; align-items: center; }
-        .input-temp { padding: 8px; width: 80px; font-size: 16px; background: var(--surface-alt); color: var(--text); border: 1px solid var(--border); border-radius: 5px; text-align: center; }
+        .input-group { margin-top: 15px; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+        .input-row { display: flex; justify-content: center; align-items: center; gap: 8px; width: 100%; }
+        .input-label { color: var(--muted); font-size: 14px; }
+        .input-temp { min-height: 44px; padding: 8px 6px; width: 88px; font-size: 16px; background: var(--surface-alt); color: var(--text); border: 1px solid var(--border); border-radius: 5px; text-align: center; }
+        .input-temp:disabled { color: var(--muted); opacity: 0.8; }
+        .input-temp::-webkit-inner-spin-button { opacity: 1; width: 28px; height: 36px; margin: 0; }
         .input-temp::placeholder { color: var(--muted); }
+        .btn-new-session { background: var(--surface-alt); border: 1px solid var(--accent); color: var(--accent); padding: 8px 15px; border-radius: 5px; cursor: pointer; margin-top: 12px; }
         .session { margin-top: 25px; text-align: left; background: var(--surface-alt); padding: 15px; border-radius: 8px; border: 1px solid var(--border); }
         .session-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--accent); padding-bottom: 5px; margin-bottom: 8px; gap: 10px; }
         .session h4 { margin: 0; color: var(--accent); font-size: 16px; }
@@ -68,7 +73,7 @@ const char index_html[] PROGMEM = R"rawliteral(
         th { background-color: var(--surface); color: var(--text); }
         tr:nth-child(even){background-color: #1b222c;}
         @media (max-width: 520px) {
-            .input-group { flex-wrap: wrap; }
+            .input-row { flex-wrap: wrap; }
             .session-header { align-items: flex-start; flex-direction: column; }
             table { font-size: 11px; }
             th, td { padding: 4px; }
@@ -101,12 +106,22 @@ const char index_html[] PROGMEM = R"rawliteral(
         <div class="card">
             <h3>🌡️ Temperatur loggen</h3>
             <div class="input-group">
-                <input type="number" step="0.1" min="0.1" id="voltageInput" class="input-temp" placeholder="24.0">
-                <span style="font-size:18px; margin-left:5px; margin-right:10px;">V</span>
-                <input type="number" step="0.1" id="tempInput" class="input-temp" placeholder="25.0">
-                <span style="font-size:18px; margin-left:5px; margin-right:10px;">°C</span>
-                <button class="btn btn-log" onclick="logDaten()">Speichern</button>
+                <div class="input-row">
+                    <label class="input-label" for="voltageInput">Spannung</label>
+                    <input type="number" step="0.1" min="0.1" id="voltageInput" class="input-temp" placeholder="24.0">
+                    <span style="font-size:18px; margin-right:10px;">V</span>
+                    <button class="btn btn-log" onclick="logDaten()">Speichern</button>
+                </div>
+                <div class="input-row">
+                    <label class="input-label" for="tempInnenInput">Innen</label>
+                    <input type="number" step="0.1" id="tempInnenInput" class="input-temp" placeholder="25.0">
+                    <span style="font-size:18px; margin-right:10px;">°C</span>
+                    <label class="input-label" for="tempAussenInput">Außen</label>
+                    <input type="number" step="0.1" id="tempAussenInput" class="input-temp" placeholder="20.0">
+                    <span style="font-size:18px;">°C</span>
+                </div>
             </div>
+            <button class="btn-new-session" onclick="starteNeueSession()">Neue Session</button>
             <div id="sessionContainer"></div>
         </div>
     </div>
@@ -115,6 +130,7 @@ const char index_html[] PROGMEM = R"rawliteral(
         let systemAktiv = false;
         const TEMPERATUR_LOG_KEY = 'magnetkugelbahnTemperaturLog';
         let temperaturSessions = ladeTemperaturSessions();
+        let aktiveSession = temperaturSessions.find(session => session.spannung !== 'unbekannt') || null;
 
         function ladeTemperaturSessions() {
             try {
@@ -198,7 +214,8 @@ const char index_html[] PROGMEM = R"rawliteral(
                     <th>AN/AUS (ms)</th>
                     <th>Duty</th>
                     <th>Laufzeit</th>
-                    <th>Temp</th>
+                    <th>Innen</th>
+                    <th>Außen</th>
                 </tr></thead><tbody></tbody>`;
                 const tbody = tabelle.getElementsByTagName('tbody')[0];
                 session.eintraege.forEach(eintrag => {
@@ -207,11 +224,34 @@ const char index_html[] PROGMEM = R"rawliteral(
                     zeile.insertCell(1).innerText = `${eintrag.an} / ${eintrag.aus}`;
                     zeile.insertCell(2).innerText = `${eintrag.dc} %`;
                     zeile.insertCell(3).innerText = formatiereZeit(eintrag.laufzeit);
-                    zeile.insertCell(4).innerText = `${eintrag.temperatur} °C`;
+                    const innen = eintrag.innen ?? eintrag.temperatur ?? '';
+                    const aussen = eintrag.aussen ?? '';
+                    zeile.insertCell(4).innerText = innen === '' ? '' : `${innen} °C`;
+                    zeile.insertCell(5).innerText = aussen === '' ? '' : `${aussen} °C`;
                 });
                 bereich.appendChild(tabelle);
                 container.appendChild(bereich);
             });
+        }
+
+        function aktualisiereSessionEingaben() {
+            const spannungInput = document.getElementById('voltageInput');
+            const innenInput = document.getElementById('tempInnenInput');
+            const aussenInput = document.getElementById('tempAussenInput');
+            const ersterEintrag = aktiveSession?.eintraege?.[0];
+
+            spannungInput.disabled = Boolean(aktiveSession);
+            spannungInput.value = aktiveSession ? aktiveSession.spannung : '';
+            if (ersterEintrag) {
+                innenInput.value = ersterEintrag.innen ?? ersterEintrag.temperatur ?? '';
+                aussenInput.value = ersterEintrag.aussen ?? '';
+            }
+        }
+
+        function starteNeueSession() {
+            aktiveSession = null;
+            document.getElementById('voltageInput').disabled = false;
+            document.getElementById('voltageInput').value = '';
         }
 
         function toggleSystem() {
@@ -230,38 +270,38 @@ const char index_html[] PROGMEM = R"rawliteral(
         }
 
         function logDaten() {
-            const voltageVal = Number.parseFloat(document.getElementById('voltageInput').value);
-            const tempVal = document.getElementById('tempInput').value;
-            if (!Number.isFinite(voltageVal) || voltageVal <= 0) {
-                return alert("Bitte zuerst eine gültige Spannung eingeben!");
+            const voltageInput = document.getElementById('voltageInput');
+            const innenVal = Number.parseFloat(document.getElementById('tempInnenInput').value);
+            const aussenVal = Number.parseFloat(document.getElementById('tempAussenInput').value);
+            if (!Number.isFinite(innenVal) || !Number.isFinite(aussenVal)) {
+                return alert("Bitte Innen- und Außentemperatur eingeben!");
             }
-            if(!tempVal) return alert("Bitte zuerst eine Temperatur eingeben!");
-
-            const spannung = voltageVal.toFixed(1);
+            if (!aktiveSession) {
+                const voltageVal = Number.parseFloat(voltageInput.value);
+                if (!Number.isFinite(voltageVal) || voltageVal <= 0) {
+                    return alert("Bitte zuerst eine gültige Spannung eingeben!");
+                }
+                aktiveSession = {
+                    spannung: voltageVal.toFixed(1),
+                    timestamp: Date.now(),
+                    eintraege: []
+                };
+                temperaturSessions.unshift(aktiveSession);
+            }
             
             fetch('/status').then(response => response.json()).then(data => {
-                let session = temperaturSessions.find(eintrag => eintrag.spannung === spannung);
-                if (!session) {
-                    session = {
-                        spannung: spannung,
-                        timestamp: Date.now(),
-                        eintraege: []
-                    };
-                    temperaturSessions.unshift(session);
-                }
-
-                session.eintraege.unshift({
+                aktiveSession.eintraege.unshift({
                     timestamp: Date.now(),
                     an: data.an,
                     aus: data.aus,
                     dc: data.dc,
                     laufzeit: data.laufzeit,
-                    temperatur: tempVal
+                    innen: innenVal.toFixed(1),
+                    aussen: aussenVal.toFixed(1)
                 });
                 speichereTemperaturLog();
                 rendereTemperaturLog();
-                
-                document.getElementById('tempInput').value = ''; // Input leeren
+                aktualisiereSessionEingaben();
             });
         }
 
@@ -271,6 +311,10 @@ const char index_html[] PROGMEM = R"rawliteral(
                 return;
             }
 
+            if (session === aktiveSession) {
+                aktiveSession = null;
+                aktualisiereSessionEingaben();
+            }
             temperaturSessions.splice(sessionIndex, 1);
             speichereTemperaturLog();
             rendereTemperaturLog();
@@ -282,7 +326,7 @@ const char index_html[] PROGMEM = R"rawliteral(
                 return;
             }
 
-            const kopf = 'Spannung(V);Zeitpunkt;AN(ms);AUS(ms);DutyCycle(%);Laufzeit(s);Temperatur(C)';
+            const kopf = 'Spannung(V);Zeitpunkt;AN(ms);AUS(ms);DutyCycle(%);Laufzeit(s);Innen(C);Außen(C)';
             const zeilen = session.eintraege.map(eintrag => [
                 session.spannung,
                 formatiereZeitstempel(eintrag.timestamp),
@@ -290,7 +334,8 @@ const char index_html[] PROGMEM = R"rawliteral(
                 eintrag.aus,
                 String(eintrag.dc).replace('.', ','),
                 eintrag.laufzeit,
-                String(eintrag.temperatur).replace('.', ',')
+                String(eintrag.innen ?? eintrag.temperatur ?? '').replace('.', ','),
+                String(eintrag.aussen ?? '').replace('.', ',')
             ].map(wert => `"${String(wert).replaceAll('"', '""')}"`).join(';'));
             const csv = `\uFEFF${[kopf, ...zeilen].join('\n')}`;
             const link = document.createElement('a');
@@ -302,6 +347,7 @@ const char index_html[] PROGMEM = R"rawliteral(
         }
 
         rendereTemperaturLog();
+        aktualisiereSessionEingaben();
 
         // Regelmäßiger Datenabgleich mit dem ESP32 (Intervall 500ms für genaue Stoppuhr)
         setInterval(() => {
