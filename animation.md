@@ -70,82 +70,200 @@ Durch das Einsetzen von $numPeaks = 7$ in die Kosinusfunktion ergibt sich auf de
 2. **Im Verlauf:** Es folgen drei lokale Minima beziehungsweise Wellentäler ($y = -2\,\text{cm}$) und zwei innere lokale Maxima beziehungsweise Wellenberge ($y = +2\,\text{cm}$).
 3. **Bei $x = 100\,\text{cm}$:** Die Funktion endet exakt wieder auf einem lokalen Maximum ($y = +2\,\text{cm}$), was den **letzten halben Berg** rechts abbildet.
 
-Diese mathematische Randbedingung bildet keine mechanisch geschlossene Senke. Der Simulator begrenzt die Kugel numerisch bei $x = R$ und $x = L - R$ und kehrt bei einem Randkontakt die Geschwindigkeit mit dem Faktor $0{,}4$ um. Das ist eine vereinfachte Stoß- und Energieverlustregel, keine aus der Bahngeometrie folgende Endbegrenzung.
+Diese mathematische Randbedingung bildet keine mechanisch geschlossene Senke. Der nutzbare Bahnbereich für den Kugelmittelpunkt ist $R \leq x \leq L-R$. Wird dieser Bereich überschritten, verlässt die Kugel die offene Bahn; es gibt weder eine künstliche Umkehr noch einen Energieverlust durch eine numerische Randwand.
 
 
 ## 3. Physik der Rollbewegung und der effektive Rollradius
 
-### 3.1 Physikalische Beschreibung der Rollbewegung
+### 3.1 Bahnkoordinate und lokale Geometrie
 
-In der Simulation werden vereinfachte Bewegungsgleichungen numerisch gelöst. Das Modell berücksichtigt den **effektiven Rollradius** und das **Trägheitsmoment**, bildet aber weder die vollständige Kontaktmechanik noch die exakte Tangentialbewegung auf der gekrümmten Bahn ab.
+Die Dynamik wird in der **Bahnbogenlänge** $s$ formuliert. Die horizontale Koordinate $x$ ist nur noch eine Darstellungs- und Geometriekoordinate. Für
+
+$$
+y(x) = A\cos(kx),
+\qquad
+k = \frac{(numPeaks-1)\pi}{L}
+$$
+
+gelten
+
+$$
+y'(x) = -Ak\sin(kx),
+\qquad
+y''(x) = -Ak^2\cos(kx).
+$$
+
+Die Bogenlänge wird durch
+
+$$
+\frac{ds}{dx} = q(x) = \sqrt{1 + y'(x)^2}
+$$
+
+definiert. Der Code berechnet $s(x)$ numerisch in einer Arc-Length-Tabelle und invertiert diese Tabelle für die Darstellung zu $x(s)$. Dadurch werden Geschwindigkeit und Ortsänderung nicht mehr in verschiedenen Koordinatensystemen vermischt.
+
+Der lokale Bahnwinkel im geneigten Aufbau ist
+
+$$
+\alpha(x) = \arctan(y'(x)) + \theta,
+$$
+
+wobei $\theta$ die einstellbare Gesamtneigung der Bahn ist. Der Tangentialeinheitsvektor lautet
+
+$$
+\mathbf t = (\cos\alpha,\,\sin\alpha).
+$$
 
 ### 3.2 Der effektive Rollradius ($r_{\mathrm{eff}}$)
-Unter der Modellannahme, dass die halbe lichte Spurweite dem seitlichen Abstand der Kontaktlage entspricht, rotieren die Kontaktpunkte auf einem kleineren Kreisradius als der geometrische Außenradius ($R = 24\,\text{mm}$) der Kugel.
 
-Dieser effektive Rollradius $r_{\text{eff}}$ berechnet sich über den Satz des Pythagoras aus dem Außenradius und der halben Spurweite:
+Unter der Modellannahme, dass die halbe lichte Spurweite dem seitlichen Abstand der Kontaktlage entspricht, rotieren die Kontaktpunkte auf einem kleineren Kreisradius als der geometrische Außenradius ($R = 24\,\text{mm}$) der Kugel.
 
 $$
 r_{\mathrm{eff}} = \sqrt{R^2 - \left(\frac{d}{2}\right)^2}
 $$
 
+Für die Standardwerte ergibt sich
+
 $$
 r_{\mathrm{eff}}
-	= \sqrt{2{,}4^2 - 1{,}75^2}\,\text{cm}
-	= \sqrt{2{,}6975}\,\text{cm}
-	\approx 1{,}6424\,\text{cm}
+= \sqrt{2{,}4^2 - 1{,}75^2}\,\text{cm}
+= \sqrt{2{,}6975}\,\text{cm}
+\approx 1{,}6424\,\text{cm}.
 $$
 
-Diese Formel ist deshalb eine Modellannahme und keine allgemein gültige Kontaktberechnung für eine lichte Spurweite. Im Code wird bei einer Kugel, die nicht größer als die halbe Spurweite ist, ersatzweise der Außenradius verwendet.
+Die Formel ist eine Modellannahme und keine allgemeine Kontaktberechnung für eine lichte Spurweite. Ist die Kugel nicht größer als die halbe Spurweite, verwendet der Code ersatzweise den Außenradius.
 
-
-- **Auswirkung auf die Dynamik:** Bei einer linearen Vorwärtsbewegung der Kugel um eine Strecke $\Delta x$ muss sich die Kugel aufgrund des kleineren Abrollradius $r_{\mathrm{eff}}$ **schneller um ihre eigene Achse drehen** (höhere Winkelgeschwindigkeit $\omega = v / r_{\mathrm{eff}}$), als wenn sie auf einer flachen Ebene abrollen würde.
-
-### 3.3 Das Trägheitsmoment und die Beschleunigungskorrektur
-Eine rollende Kugel besitzt nicht nur translationale kinetische Energie (Vorschub), sondern auch rotatorische kinetische Energie (Drehung). Für eine homogene Vollkugel gilt das Trägheitsmoment:
+Die Kugelposition wird für die Darstellung um $r_{\mathrm{eff}}$ in Normalenrichtung vom Bahnpunkt versetzt. Die Rollkinematik verwendet dagegen direkt die Bahnbogenlänge:
 
 $$
-I = \frac{2}{5}mR^2
+\omega = \frac{v}{r_{\mathrm{eff}}},
+\qquad v = \dot{s}.
 $$
 
-Wenn eine Kugel auf einer flachen Ebene *ohne Rutschen* rollt, führt die Aufteilung der potenziellen Energie in Translation und Rotation dazu, dass die effektive Beschleunigung auf einer Schräge gegenüber einem reinen reibungsfreien Gleiter um den Faktor **5/7 (ca. 71,4 %)** reduziert ist. Für das vereinfachte Modell mit dem kleineren Abrollradius verwendet der Code stattdessen:
+### 3.3 Trägheitsmoment und tangentiale Bewegungsgleichung
+
+Für eine homogene Vollkugel gilt
 
 $$
-a = \frac{5}{7}g\sin(\alpha)
+I = \frac{2}{5}mR^2.
 $$
 
-Der im Code verwendete Faktor ist
+Der effektive Trägheitsfaktor des vereinfachten Rollmodells ist
 
 $$
-f_{\mathrm{acc}} = \frac{1}{1 + 0{,}4\left(\frac{R}{r_{\mathrm{eff}}}\right)^2}.
+f_{\mathrm{acc}}
+= \frac{1}{1 + I/(m r_{\mathrm{eff}}^2)}
+= \frac{1}{1 + 0{,}4(R/r_{\mathrm{eff}})^2}.
 $$
 
-Er entspricht unter der Annahme $I = \frac{2}{5}mR^2$ dem Ausdruck $1/(1 + I/(m r_{\mathrm{eff}}^2))$. Für die Standardwerte beträgt er ungefähr $0{,}539$ und ist damit kleiner als $5/7$. Das ist eine Näherung für das angenommene Rollmodell, keine vollständige Analyse der realen Zwei-Punkt-Kontakte.
+Die tangentiale Gewichtskraft und die daraus resultierende Beschleunigung sind
 
-### 3.4 Koordinaten und Gültigkeitsbereich des Bewegungsmodells
+$$
+F_{g,t} = -mg\sin(\alpha),
+\qquad
+a_s = f_{\mathrm{acc}}\frac{F_{t,\mathrm{gesamt}}}{m}.
+$$
 
-Im Code wird `ballV` als Geschwindigkeit in horizontaler $x$-Richtung fortgeschrieben. Die Hangabtriebskomponente wird dagegen aus dem lokalen Neigungswinkel der Kurve bestimmt. Diese Kombination ist ein bewusst vereinfachtes Näherungsmodell; eine exakte Beschreibung müsste Bahngeschwindigkeit, Umrechnung auf die $x$-Koordinate, Krümmung und Normalkraft konsistent koppeln.
+Alle Kräfte $F_{t,\mathrm{gesamt}}$ werden entlang derselben Tangente addiert. Der Code verwendet eine Euler-Cromer-Integration mit festem Zeitschritt $\Delta t = 1/240\,\text{s}$:
 
-## 4. Beschreibung der Simulationsparameter und Dämpfung
+$$
+v_{n+1} = v_n + a_s(s_n,v_n)\Delta t,
+\qquad
+s_{n+1} = s_n + v_{n+1}\Delta t.
+$$
 
-Das System berücksichtigt zwei kontinuierliche Dämpfungsmodelle, die über Schieberegler skaliert werden können. Zusätzlich enthält es die oben beschriebene numerische Randstoßregel.
+Erst danach wird $s_{n+1}$ über die Arc-Length-Tabelle nach $x$ umgerechnet und zusammen mit $y(x)$, dem Normalenversatz und $\theta$ in Bildschirmkoordinaten transformiert.
 
-### 4.1 Die Rollreibung ($\mu_R$)
+### 3.4 Krümmung und dynamische Normalkraft
 
-- **Physikalische Ursache:** Als Modellannahme dienen mikroskopische Verformungen der Stahlkugel und der beiden Eisenrundstäbe am unmittelbaren Kontaktpunkt.
-- **Mittelwert (Default):** $\mu_R = 0{,}0020$. Dies entspricht dem realistischen Literaturwert für eine hochfeste, geschliffene Materialpaarung aus Stahl und Eisen/Stahl.
-- **Berechnung:** Die Bremskraft wird als Näherung proportional zur Gewichtskomponente normal zur Bahn angesetzt: $F_{\text{Roll}} = \mu_R \cdot m \cdot g \cdot \cos(\alpha)$. Die zusätzliche Normalkraft durch Bahnkrümmung wird nicht berechnet. Bei $v = 0$ wirkt im Code keine Rollreibungsbeschleunigung; statische Reibung und ein Haftkriterium sind nicht modelliert.
-- **Regler-Bereich:** $-50\%$ bis $+50\%$ ($0{,}0010$ bis $0{,}0030$).
+Die signierte Krümmung der Graphkurve ist
 
-### 4.2 Der Luftwiderstand ($c_w$)
+$$
+\kappa(x) = \frac{y''(x)}{\left(1+y'(x)^2\right)^{3/2}}.
+$$
 
-- **Physikalische Ursache:** Der Strömungswiderstand, den die Kugel beim Verdrängen der Umgebungsluft erfährt. Im Modell wächst diese Kraft quadratisch mit der Geschwindigkeit.
-- **Mittelwert (Default):** $c_w = 0{,}470$. Dieser Wert ist ein empirischer Näherungswert, keine universelle Konstante; er hängt unter anderem von Reynolds-Zahl, Oberfläche und Strömungsbereich ab.
-- **Berechnung:** Die Kraft berechnet sich aus der Stirnfläche der Kugel ($A = \pi \cdot R^2$), der Luftdichte ($\rho \approx 1{,}2\,\text{mg/cm}^3$) und der aktuellen Geschwindigkeit im Quadrat: $F_{\text{Luft}} = 0{,}5 \cdot \rho \cdot A \cdot c_w \cdot v^2$.
-- **Regler-Bereich:** $-50\%$ bis $+50\%$ ($0{,}235$ bis $0{,}705$).
+Der zugehörige **signierte** Krümmungsradius ist
 
-### 4.3 Startbedingung und Speicherung
+$$
+R_k = \frac{1}{\kappa}.
+$$
 
-- **Startverhalten:** Um reproduzierbare Ergebnisse zu gewährleisten, wird die Kugel bei jedem Reset im Stillstand ($v = 0$) bei $x = r_{\mathrm{eff}}$ platziert. Das ist der numerische Startpunkt nahe dem linken Rand; der exakte Scheitelpunkt der Kosinusbahn liegt bei $x = 0$.
-- **Persistenz:** Alle Modifikationen an den Reibungskoeffizienten, Massen oder Geometrien werden über die `LocalStorage`-API des Webbrowsers dauerhaft gesichert, sodass die Versuchskonfiguration auch nach einem Neuladen der Webseite unverändert aktiv bleibt.
+Für $\kappa=0$ wird der Krümmungsbeitrag null gesetzt. Mit dem Vorzeichen der Krümmung lautet die Normalkraft des Schienenkontakts
+
+$$
+F_N = mg\cos(\alpha) + \frac{mv^2}{R_k}
+= mg\cos(\alpha) + mv^2\kappa.
+$$
+
+In einem Tal ist der Krümmungsbeitrag positiv und erhöht die Normalkraft. Auf einem Berg ist er negativ und kann den Kontakt bei hoher Geschwindigkeit aufheben. Gilt $F_N \leq 0$, verlässt die Kugel die Schiene und wird als freier Flug weitergerechnet.
+
+## 4. Reibung, Haftung, Luftwiderstand und offene Bahnenden
+
+### 4.1 Rollreibung und Haftreibung ($\mu_R$, $\mu_H$)
+
+- **Rollreibung:** Bei $v\neq0$ wird die dynamische Rollreibung mit der aktuellen Normalkraft berechnet:
+
+	$$
+	F_R = -\operatorname{sgn}(v)\,\mu_R F_N.
+	$$
+
+	Im Code ist $\mu_R$ der Reglerwert, standardmäßig $0{,}0020$.
+- **Haftreibung:** Der feste Modellwert ist $\mu_H=0{,}004$. Bei nahezu verschwindender Geschwindigkeit wird die Kugel exakt angehalten und bleibt stehen, solange
+
+	$$
+	|F_{g,t}| \leq \mu_H F_N.
+	$$
+
+	Überschreitet die Hangabtriebskraft diese Grenze, startet die Kugel wieder. Damit entsteht kein künstliches Kriechen durch numerisches Rauschen.
+- **Kontaktbedingung:** Das Haft- und Rollreibungsmodell wird nur bei $F_N>0$ angewandt. Bei $F_N\leq0$ ist kein positiver Schienenkontakt mehr vorhanden.
+
+### 4.2 Luftwiderstand ($c_w$)
+
+Der Luftwiderstand wirkt ebenfalls entlang der Tangente und berücksichtigt das Vorzeichen der Bahngeschwindigkeit:
+
+$$
+F_{\mathrm{Luft}}
+= -\frac12\rho A c_w\,v|v|,
+\qquad
+A = \pi R^2.
+$$
+
+Der Standardwert ist $c_w=0{,}470$; die Luftdichte bleibt $\rho\approx1{,}2\,\text{mg/cm}^3$. Der Reglerbereich für $c_w$ reicht von $0{,}235$ bis $0{,}705$. Zusammen mit Gewichtskraft und Rollreibung ergibt sich
+
+$$
+F_{t,\mathrm{gesamt}}
+= F_{g,t} + F_R + F_{\mathrm{Luft}}.
+$$
+
+### 4.3 Offene Bahnenden und freier Flug
+
+Der gültige Bereich für den Kugelmittelpunkt ist
+
+$$
+R \leq x \leq L-R.
+$$
+
+Beim Überschreiten eines dieser offenen Enden wird die Position auf den jeweiligen Endpunkt gesetzt und die Kugel verlässt die Bahn mit ihrer momentanen Tangentialgeschwindigkeit. Es gibt keinen Abprallfaktor und keinen künstlichen Energieverlust. Im freien Flug werden Position und Geschwindigkeit in den geneigten Weltkoordinaten mit
+
+$$
+\dot{v}_x = 0,
+\qquad
+\dot{v}_y = -g
+$$
+
+weiterintegriert. Dasselbe Freiflugmodell wird verwendet, wenn die dynamische Normalkraft auf einem Berg $F_N\leq0$ wird.
+
+### 4.4 Startbedingung, Frequenzanzeige und Speicherung
+
+- **Startverhalten:** Beim Reset startet die Kugel im Stillstand ($v=0$) bei $x=R$, also am nutzbaren linken Randbereich. Die Startposition wird intern als $s=s(x=R)$ gespeichert.
+- **Frequenzanzeige:** Die räumliche Wellenlänge wird entlang der Bahn aus der Gesamtbogenlänge $S$ bestimmt:
+
+	$$
+	\lambda_s = \frac{2S}{numPeaks-1},
+	\qquad
+	f = \frac{|v|}{\lambda_s}.
+	$$
+
+	Während des freien Flugs zeigt die Anzeige die Geschwindigkeit des freien Körpers; eine Bahnfrequenz ist dann physikalisch nicht mehr definiert.
+- **Persistenz:** Änderungen an Reibungskoeffizienten, Masse oder Geometrie werden über die `LocalStorage`-API dauerhaft gespeichert. Der Haftreibungskoeffizient $\mu_H$ ist ein fester Modellparameter und besitzt keinen Schieberegler.
 
 Die konkreten Materialien, Maße und Literaturwerte des realen Versuchsaufbaus sind im Repository nicht durch Messprotokolle oder externe Quellen belegt. Sie sind daher als Versuchsaufbau-Annahmen beziehungsweise externe Werte zu verstehen und müssen für eine reale Validierung separat geprüft werden.
