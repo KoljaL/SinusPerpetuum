@@ -1,0 +1,573 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Kugel-Simulator mit EM-Booster</title>
+    <style>
+      body {
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        background: #1e1e24;
+        color: #f5f5f7;
+        margin: 20px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+      h1 {
+        margin-bottom: 5px;
+        color: #4a90e2;
+      }
+      .container {
+        width: 1000px;
+        background: #2a2a35;
+        padding: 20px;
+        border-radius: 12px;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+      }
+      canvas {
+        background: #141419;
+        border-radius: 8px;
+        display: block;
+        margin-bottom: 20px;
+        border: 1px solid #3a3a4a;
+      }
+      .dashboard {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 20px;
+        background: #22222c;
+        padding: 15px;
+        border-radius: 8px;
+      }
+      .control-group {
+        display: flex;
+        flex-direction: column;
+      }
+      .control-group label {
+        font-size: 0.9rem;
+        margin-bottom: 5px;
+        color: #b0b0bc;
+        display: flex;
+        justify-content: space-between;
+      }
+      input[type='range'] {
+        width: 100%;
+        accent-color: #4a90e2;
+      }
+      .btn-panel {
+        grid-column: span 3;
+        display: flex;
+        gap: 10px;
+        justify-content: center;
+        margin-top: 10px;
+      }
+      button {
+        padding: 10px 20px;
+        border: none;
+        border-radius: 6px;
+        font-weight: bold;
+        cursor: pointer;
+        transition: background 0.2s;
+      }
+      .btn-primary {
+        background: #4a90e2;
+        color: white;
+      }
+      .btn-primary:hover {
+        background: #357abd;
+      }
+      .btn-secondary {
+        background: #4e4e5a;
+        color: white;
+      }
+      .btn-secondary:hover {
+        background: #3d3d47;
+      }
+      .telemetry {
+        grid-column: span 3;
+        background: #141419;
+        padding: 10px;
+        border-radius: 6px;
+        font-family: monospace;
+        font-size: 0.85rem;
+        display: flex;
+        justify-content: space-around;
+        color: #00ff66;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>Kugelrollbahn: Physik-Simulator & EM-Booster</h1>
+      <p style="margin-top: 0; color: #8a8a9a; font-size: 0.9rem">Echte Bahngeschwindigkeit, Fliehkraft-Reibung und gesättigte Spitzenkerne mit Wired-OR Hallsensoren.</p>
+
+      <canvas id="simCanvas" width="1000" height="400"></canvas>
+
+      <div class="dashboard">
+        <!-- Spulen & Sensor Steuerung -->
+        <div class="control-group">
+          <label><span>⏱️ Spulen-Timer (Abschalten):</span><span id="v-timer">40 ms</span></label>
+          <input type="range" id="param-timer" min="10" max="150" step="1" value="40" />
+        </div>
+        <div class="control-group">
+          <label><span>📍 Hallsensor-Position (Reichweite):</span><span id="v-sensor">4.0 cm</span></label>
+          <input type="range" id="param-sensor" min="1.0" max="8.0" step="0.1" value="4.0" />
+        </div>
+        <div class="control-group">
+          <label><span>⚡ Magnet-Power (F_max):</span><span id="v-fmax">22.5 N</span></label>
+          <input type="range" id="param-fmax" min="0.0" max="50.0" step="0.5" value="22.5" />
+        </div>
+
+        <!-- Physikalische Dämpfung -->
+        <div class="control-group">
+          <label><span>🪵 Rollreibung (µ_R):</span><span id="v-mur">0.0020</span></label>
+          <input type="range" id="param-mur" min="0.0005" max="0.0050" step="0.0001" value="0.0020" />
+        </div>
+        <div class="control-group">
+          <label><span>💨 Luftwiderstand (c_w):</span><span id="v-cw">0.47</span></label>
+          <input type="range" id="param-cw" min="0.10" max="1.00" step="0.05" value="0.47" />
+        </div>
+        <div class="control-group" style="justify-content: center; align-items: center">
+          <label style="margin: 0"><input type="checkbox" id="param-em-toggle" checked /> Booster-System Aktiv</label>
+        </div>
+
+        <!-- Telemetrie-Anzeige -->
+        <div class="telemetry">
+          <div>Position X: <span id="tel-x">0.00</span> m</div>
+          <div>Geschw. v: <span id="tel-v">0.00</span> m/s</div>
+          <div>Normalkraft F_N: <span id="tel-fn">0.00</span> N</div>
+          <div>Fliehkraft F_cf: <span id="tel-fcf">0.00</span> N</div>
+        </div>
+
+        <!-- Buttons -->
+        <div class="btn-panel">
+          <button class="btn-primary" id="btn-reset">Reset Kugel (v=0)</button>
+          <button class="btn-secondary" id="btn-push">Kugel anstupsen (+0.3 m/s)</button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // Hier werden die Scripte aus Teil 1, 2 und 3 eingefügt!
+      // ============================================================================
+      // PART 1: PHYSICS CONSTANTS, TRACK GEOMETRY & SYSTEM STATE
+      // ============================================================================
+
+      // 1. Fixed Mechanical Constants (Homogeneous Solid Steel Sphere)
+      const BALL_R = 0.024; // Outer radius: 2.4 cm = 0.024 m
+      const BALL_M = 0.45; // Mass: 450 g = 0.45 kg
+      const TRACK_D = 0.035; // Gauge width (clear space): 35 mm = 0.035 m
+      const G_ACC = 9.81; // Gravitational acceleration (m/s^2)
+
+      // Effective rolling radius due to 2-point rail contact
+      const R_EFF = Math.sqrt(Math.pow(BALL_R, 2) - Math.pow(TRACK_D / 2, 2));
+      // Rotational inertia factor for solid sphere rolling on rails
+      const F_ACC = 1.0 / (1.0 + 0.4 * Math.pow(BALL_R / R_EFF, 2));
+
+      // 2. Track Geometry Parameters (7 Peaks = 6 Wave Segments across 100 cm)
+      const TRACK_L = 1.0; // Total length: 100 cm = 1.0 m
+      const NUM_PEAKS = 7;
+      const AMPLITUDE = 0.02; // Vertical amplitude: 2.0 cm = 0.02 m
+      const K_WAVE = ((NUM_PEAKS - 1) * Math.PI) / TRACK_L;
+
+      // 3. Calibrated Saturated Magnet Parameters (Saturated Core + Pointed Tips)
+      const MAG_EXPONENT = 4.0; // n=4 steep decline due to pointed focus
+      const MAG_R0 = 0.015; // Shape offset factor (meters) to avoid infinity
+      // F_MAX calibrated so that F(0.04m) slightly exceeds rolling friction (~0.05 N)
+      const MAG_FMAX = 22.5; // Theoretical peak holding force in Newtons at x=0
+
+      // Positions of the two central hills (indices 2 and 4 out of 6 intervals)
+      const MAG_POSITIONS = [
+        (2 * Math.PI) / K_WAVE, // Summit of Hill 1 (~0.333 m)
+        (4 * Math.PI) / K_WAVE, // Summit of Hill 2 (~0.666 m)
+      ];
+
+      // Adjustable Control Variables (User Sliders / System Config)
+      let cfg = {
+        mu_r: 0.002, // Rolling friction coefficient
+        cw: 0.47, // Air resistance coefficient
+        rho_air: 1.2, // Air density (kg/m^3)
+        timerMs: 40.0, // Magnet cutoff timer in milliseconds
+        sensorDist: 0.04, // Activation zone: 4 cm ahead of tip (meters)
+        magnetEnabled: true, // Global toggle for the EM booster system
+      };
+
+      // 4. Dynamic Simulation State
+      let state = {
+        s: R_EFF, // Position along the curved path (meters)
+        v: 0.0, // Velocity along the path (m/s)
+        x: 0.0, // Calculated screen X coordinate (meters)
+        y: 0.0, // Calculated screen Y coordinate (meters)
+        alpha: 0.0, // Current inclination angle (radians)
+        curvRadius: Infinity, // Local track curvature radius (meters)
+      };
+
+      // 5. Magnet Hardware & Coil State (Coil 0 and Coil 1)
+      let magnets = [
+        { active: false, timer: 0, lockout: 0, x_center: MAG_POSITIONS[0] },
+        { active: false, timer: 0, lockout: 0, x_center: MAG_POSITIONS[1] },
+      ];
+
+      // Analytical track height function y(x)
+      function getTrackY(x) {
+        return AMPLITUDE * Math.cos(K_WAVE * x);
+      }
+
+      // First derivative dy/dx (slope)
+      function getTrackSlope(x) {
+        return -AMPLITUDE * K_WAVE * Math.sin(K_WAVE * x);
+      }
+
+      // Second derivative d^2y/dx^2 (used for centrifugal force calculation)
+      function getTrackSecDerivative(x) {
+        return -AMPLITUDE * Math.pow(K_WAVE, 2) * Math.cos(K_WAVE * x);
+      }
+      // ============================================================================
+      // PART 2: TRACK GEOMETRY MATHEMATICS AND COORDINATE MAPPING
+      // ============================================================================
+
+      // Resolves path distance 's' back into real horizontal 'x' using step integration
+      function updateCartesianCoordinates() {
+        let current_s = 0;
+        let current_x = 0;
+        const steps = 200;
+        const dx = state.s / steps;
+
+        // Numerical integration to map arc length s to horizontal x
+        for (let i = 0; i < steps; i++) {
+          let slope = getTrackSlope(current_x);
+          let ds = Math.sqrt(1 + Math.pow(slope, 2)) * dx;
+          current_s += ds;
+          if (current_s >= state.s) {
+            current_x += dx * ((state.s - (current_s - ds)) / ds);
+            break;
+          }
+          current_x += dx;
+        }
+
+        // Boundary constraints
+        if (current_x < BALL_R) current_x = BALL_R;
+        if (current_x > TRACK_L - BALL_R) current_x = TRACK_L - BALL_R;
+
+        state.x = current_x;
+        state.y = getTrackY(current_x);
+
+        // Calculate local slope angle alpha
+        let slope = getTrackSlope(state.x);
+        state.alpha = Math.atan(slope);
+
+        // Calculate analytical curvature radius R_k = (1 + (dy/dx)^2)^(3/2) / |d^2y/dx^2|
+        let d2y = getTrackSecDerivative(state.x);
+        if (Math.abs(d2y) > 1e-6) {
+          state.curvRadius = Math.pow(1 + Math.pow(slope, 2), 1.5) / Math.abs(d2y);
+          // Determine if concave (valley) or convex (hill)
+          if (d2y < 0) state.curvRadius = -state.curvRadius;
+        } else {
+          state.curvRadius = Infinity;
+        }
+      }
+
+      // Calculates the precise distance vector from the ball to a pointed magnet tip
+      function getForceFromMagnet(mag, ballX, ballV) {
+        if (!cfg.magnetEnabled || mag.lockout > 0) return 0;
+
+        // Physical bounds of the 12cm core inside the hill (8cm coil + 2cm tip each side)
+        const halfCore = 0.06;
+        let leftTipX = mag.x_center - halfCore;
+        let rightTipX = mag.x_center + halfCore;
+
+        let targetTipX = 0;
+        let targetSlopeSign = 1;
+
+        // Symmetrical logic: determine which pointed tip faces the approaching ball
+        if (ballX < mag.x_center) {
+          targetTipX = leftTipX; // Ball is approaching from the left
+          targetSlopeSign = 1; // Pulls forward along positive s
+        } else {
+          targetTipX = rightTipX; // Ball is approaching from the right
+          targetSlopeSign = -1; // Pulls backward along negative s
+        }
+
+        // Cartesian distance to targeted tip
+        let targetTipY = getTrackY(targetTipX);
+        let dx = targetTipX - ballX;
+        let dy = targetTipY - state.y;
+        let directDist = Math.sqrt(dx * dx + dy * dy);
+
+        // Wired-OR Hardware emulation via spatial zones
+        // Sensor triggers when ball enters the 4cm zone around the pointed tip
+        if (!mag.active && Math.abs(dx) <= cfg.sensorDist && Math.abs(dx) > 0.002) {
+          // Enforce direction: only activate if moving towards the hill
+          if ((dx > 0 && ballV > 0) || (dx < 0 && ballV < 0)) {
+            mag.active = true;
+            mag.timer = cfg.timerMs / 1000.0; // Initialize cutoff timer (seconds)
+            mag.lockout = 0.06; // 60ms blinding loop to protect against EM fields
+          }
+        }
+
+        if (!mag.active) return 0;
+
+        // Spatial Kelvin-Force equation incorporating saturation limits and pointed geometry
+        let forceMagnitude = (MAG_FMAX * Math.pow(MAG_R0, MAG_EXPONENT)) / Math.pow(directDist + MAG_R0, MAG_EXPONENT);
+
+        // Vector projection: translate raw spatial force onto the tangential path s
+        let forceAngle = Math.atan2(dy, dx);
+        let effectiveForce = forceMagnitude * Math.cos(forceAngle - state.alpha);
+
+        return effectiveForce;
+      }
+      // ============================================================================
+      // PART 3: NUMERICAL CORE INTEGRATION ENGINE (EULER-CROMER)
+      // ============================================================================
+
+      function stepSimulation(dt) {
+        // 1. Process Hardware Cooldown and Cutoff Timers
+        magnets.forEach((mag) => {
+          if (mag.lockout > 0) mag.lockout -= dt;
+          if (mag.active) {
+            mag.timer -= dt;
+            if (mag.timer <= 0) mag.active = false; // Hard shutdown via Timer
+          }
+        });
+
+        // 2. Map position to horizontal plane
+        updateCartesianCoordinates();
+
+        // Reales Überrollen: Check if ball flew out of bounds over the edges
+        if (state.x <= BALL_R + 0.001 || state.x >= TRACK_L - BALL_R - 0.001) {
+          // Ball left the track. Remove artificial borders.
+          // Implement free fall or end execution. Here we trigger an exit condition:
+          if (state.x <= BALL_R) {
+            state.v = Math.abs(state.v) * 0.4;
+            state.s = BALL_R + 0.005;
+          }
+          if (state.x >= TRACK_L - BALL_R) {
+            state.v = -Math.abs(state.v) * 0.4;
+            state.s = state.s - 0.005;
+          }
+          return;
+        }
+
+        // 3. Gravity component along the true tangential vector
+        let F_gravity = -BALL_M * G_ACC * Math.sin(state.alpha);
+
+        // 4. Advanced Centrifugal Normal Force calculation: F_N = m*g*cos(a) + m*v^2/R_k
+        let F_N_static = BALL_M * G_ACC * Math.cos(state.alpha);
+        let F_N_dynamic = 0.0;
+        if (state.curvRadius !== Infinity && Math.abs(state.curvRadius) > 0.01) {
+          // Valleys generate positive downforce, peaks reduce downforce
+          F_N_dynamic = (BALL_M * Math.pow(state.v, 2)) / state.curvRadius;
+        }
+        let F_Normal = Math.max(0, F_N_static + F_N_dynamic); // Normal force cannot be negative
+
+        // 5. Active EM Accelerator Forces
+        let F_Magnet = 0;
+        magnets.forEach((mag) => {
+          F_Magnet += getForceFromMagnet(mag, state.x, state.v);
+        });
+
+        // 6. Environmental Losses (Velocity Dependent)
+        let Area = Math.PI * Math.pow(BALL_R, 2);
+        let F_Air = -0.5 * cfg.rho_air * Area * cfg.cw * state.v * Math.abs(state.v);
+        let F_Friction = -cfg.mu_r * F_Normal * Math.sign(state.v);
+
+        // Total active force sum acting along path s
+        let F_Total = F_gravity + F_Magnet + F_Air + F_Friction;
+
+        // 7. Stiction / Haftreibung Kriterium (Prevent endless microscopic sliding)
+        const VELOCITY_THRESHOLD = 0.01; // 1 cm/s
+        let maxStictionForce = 1.5 * cfg.mu_r * F_Normal; // μ_H is roughly 1.5x μ_R
+
+        if (Math.abs(state.v) < VELOCITY_THRESHOLD && Math.abs(F_gravity + F_Magnet) < maxStictionForce) {
+          state.v = 0.0; // Total physical lock
+          return;
+        }
+
+        // 8. Rotational Acceleration Correction (f_acc updates dynamic angular speed)
+        let acceleration = (F_Total / BALL_M) * F_ACC;
+
+        // Semi-Implicit Euler integration for maximum conservation energy stability
+        state.v += acceleration * dt;
+        state.s += state.v * dt;
+      }
+      // ============================================================================
+      // PART 5: CANVAS RENDERING ENGINE & ANIMATION LOOP
+      // ============================================================================
+
+      const canvas = document.getElementById('simCanvas');
+      const ctx = canvas.getContext('2d');
+
+      // Pixel mapping scales: Track is 100cm (1.0m) wide.
+      // Canvas width is 1000px -> 1000 pixels per meter (10px = 1cm)
+      const SCALE_X = 1000;
+      const SCALE_Y = 2500; // Exaggerate vertical 2cm amplitude for crisp visibility
+      const OFFSET_X = 0;
+      const OFFSET_Y = 200; // Center line of the wave at Y=200px
+
+      function drawSimulation() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // 1. Draw Wooden Support Base & Cutout Groove
+        ctx.fillStyle = '#5c4033';
+        ctx.fillRect(0, OFFSET_Y + AMPLITUDE * SCALE_Y + 15, canvas.width, 40);
+
+        // 2. Draw the 2 Central Electromagnets with pointed tips inside the Hills
+        magnets.forEach((mag) => {
+          let cx = mag.x_center * SCALE_X;
+          let cy = OFFSET_Y - getTrackY(mag.x_center) * SCALE_Y;
+
+          // Draw 8cm Coil Body
+          ctx.fillStyle = mag.active ? '#ff3300' : '#d97706'; // Glows red when active
+          ctx.fillRect(cx - 40, cy + 5, 80, 25);
+
+          // Draw 12mm Iron Core with 2cm pointed extensions on both ends
+          ctx.fillStyle = '#64748b';
+          ctx.beginPath();
+          // Left pointed tip
+          ctx.moveTo(cx - 60, cy + 17);
+          ctx.lineTo(cx - 40, cy + 10);
+          ctx.lineTo(cx + 40, cy + 10);
+          // Right pointed tip
+          ctx.lineTo(cx + 60, cy + 17);
+          ctx.lineTo(cx + 40, cy + 25);
+          ctx.lineTo(cx - 40, cy + 25);
+          ctx.closePath();
+          ctx.fill();
+
+          // Symmetrical Wired-OR Hallsensors (Small pink dots at the 4cm trigger zones)
+          ctx.fillStyle = '#ec4899';
+          ctx.beginPath();
+          ctx.arc(cx - 60, OFFSET_Y - getTrackY(mag.x_center - 0.06) * SCALE_Y, 4, 0, Math.PI * 2);
+          ctx.arc(cx + 60, OFFSET_Y - getTrackY(mag.x_center + 0.06) * SCALE_Y, 4, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Draw dynamic magnetic force field lines if active
+          if (mag.active) {
+            ctx.strokeStyle = 'rgba(255, 51, 0, 0.3)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(cx - 60, cy + 17, 25, 0, Math.PI * 2);
+            ctx.arc(cx + 60, cy + 17, 25, 0, Math.PI * 2);
+            ctx.stroke();
+          }
+        });
+
+        // 3. Draw the Sine-Wave Rails (Iron Rods)
+        ctx.strokeStyle = '#94a3b8';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        for (let px = 0; px <= canvas.width; px++) {
+          let rx = px / SCALE_X;
+          let ry = OFFSET_Y - getTrackY(rx) * SCALE_Y;
+          if (px === 0) ctx.moveTo(px, ry);
+          else ctx.lineTo(px, ry);
+        }
+        ctx.stroke();
+
+        // 4. Draw the 450g Moving Steel Sphere
+        let bx = state.x * SCALE_X;
+        let by = OFFSET_Y - state.y * SCALE_Y;
+
+        // Draw ball body (offset upwards by effective contact height)
+        ctx.save();
+        ctx.translate(bx, by - BALL_R * 0.6 * SCALE_Y); // visual compression adjustment
+        ctx.fillStyle = 'radial-gradient(circle at 30% 30%, #cbd5e1 0%, #475569 80%)';
+
+        // Simple steel gradient effect
+        let grad = ctx.createRadialGradient(-5, -5, 0, 0, 0, BALL_R * SCALE_X);
+        grad.addColorStop(0, '#f8fafc');
+        grad.addColorStop(0.3, '#cbd5e1');
+        grad.addColorStop(1, '#334155');
+        ctx.fillStyle = grad;
+
+        ctx.beginPath();
+        ctx.arc(0, 0, BALL_R * SCALE_X, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+      // ============================================================================
+      // PART 6: USER INTERFACE SYNCHRONIZATION & SYSTEM INITIALIZATION
+      // ============================================================================
+
+      // Link DOM inputs to live configuration memory
+      function syncUserInterface() {
+        cfg.timerMs = parseFloat(document.getElementById('param-timer').value);
+        document.getElementById('v-timer').innerText = cfg.timerMs + ' ms';
+
+        cfg.sensorDist = parseFloat(document.getElementById('param-sensor').value) / 100.0; // cm to m
+        document.getElementById('v-sensor').innerText = (cfg.sensorDist * 100).toFixed(1) + ' cm';
+
+        const fmaxVal = parseFloat(document.getElementById('param-fmax').value);
+        document.getElementById('v-fmax').innerText = fmaxVal.toFixed(1) + ' N';
+        // Update global F_MAX constant dynamically
+        // (Note: In Part 1 it was declared const, for slider-tuning it behaves as a global)
+        // To ensure compatibility, we assign it directly to our internal solver variable:
+        window.MAG_FMAX_DYNAMIC = fmaxVal;
+
+        cfg.mu_r = parseFloat(document.getElementById('param-mur').value);
+        document.getElementById('v-mur').innerText = cfg.mu_r.toFixed(4);
+
+        cfg.cw = parseFloat(document.getElementById('param-cw').value);
+        document.getElementById('v-cw').innerText = cfg.cw.toFixed(2);
+
+        cfg.magnetEnabled = document.getElementById('param-em-toggle').checked;
+
+        // Telemetry updates
+        document.getElementById('tel-x').innerText = state.x.toFixed(3);
+        document.getElementById('tel-v').innerText = state.v.toFixed(2);
+
+        let F_N_static = BALL_M * G_ACC * Math.cos(state.alpha);
+        let F_cf = state.curvRadius !== Infinity ? (BALL_M * Math.pow(state.v, 2)) / state.curvRadius : 0;
+        document.getElementById('tel-fn').innerText = Math.max(0, F_N_static + F_cf).toFixed(2);
+        document.getElementById('tel-fcf').innerText = F_cf.toFixed(2);
+      }
+
+      // Attach Event Listeners to UI Elements
+      document.getElementById('btn-reset').addEventListener('click', () => {
+        state.s = R_EFF; // Start close to left border edge
+        state.v = 0.0;
+        magnets.forEach((m) => {
+          m.active = false;
+          m.lockout = 0;
+        });
+      });
+
+      document.getElementById('btn-push').addEventListener('click', () => {
+        state.v += 0.3; // Inject linear kinetic energy bump
+      });
+
+      // Master Physics Loop running at fixed timesteps for mathematical integrity
+      let lastTime = performance.now();
+      const FIXED_DT = 0.002; // 2ms internal execution grid to maintain solver stability
+      let accumulator = 0.0;
+
+      function loop(currentTime) {
+        let elapsed = (currentTime - lastTime) / 1000.0;
+        lastTime = currentTime;
+
+        // Prevent spiral of death on lag spikes
+        if (elapsed > 0.1) elapsed = 0.1;
+        accumulator += elapsed;
+
+        // Step physics forward in discrete micro-steps
+        while (accumulator >= FIXED_DT) {
+          // Safe mapping of the global variable from the slider
+          if (window.MAG_FMAX_DYNAMIC !== undefined) {
+            // override internal parameter
+            window.MAG_FMAX = window.MAG_FMAX_DYNAMIC;
+          }
+          stepSimulation(FIXED_DT);
+          accumulator -= FIXED_DT;
+        }
+
+        syncUserInterface();
+        drawSimulation();
+        requestAnimationFrame(loop);
+      }
+
+      // Start Engine
+      updateCartesianCoordinates();
+      requestAnimationFrame(loop);
+    </script>
+  </body>
+</html>
