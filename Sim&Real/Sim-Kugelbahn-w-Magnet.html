@@ -234,13 +234,31 @@
                 <td id="tel-fcf-min">0.00</td>
                 <td id="tel-fcf-max">0.00</td>
               </tr>
+              <tr>
+                <td>Gesamtenergie E (J)</td>
+                <td id="tel-energy">0.00</td>
+                <td id="tel-energy-min">0.00</td>
+                <td id="tel-energy-max">0.00</td>
+              </tr>
+              <tr>
+                <td>Magnetarbeit W_mag (J)</td>
+                <td id="tel-magnet-work">0.00</td>
+                <td id="tel-magnet-work-min">0.00</td>
+                <td id="tel-magnet-work-max">0.00</td>
+              </tr>
+              <tr>
+                <td>Energieverlust (J)</td>
+                <td id="tel-energy-loss">0.00</td>
+                <td id="tel-energy-loss-min">0.00</td>
+                <td id="tel-energy-loss-max">0.00</td>
+              </tr>
             </tbody>
           </table>
         </div>
 
         <div class="btn-panel">
           <button class="btn-primary" id="btn-reset">Reset Kugel & Min/Max</button>
-          <button class="btn-secondary" id="btn-push">Kugel anstupsen (+0.3 m/s)</button>
+          <button class="btn-secondary" id="btn-push">Kugel an Startposition setzen</button>
         </div>
       </div>
     </div>
@@ -257,11 +275,11 @@
       let BALL_M = 0.45; // Mass: 450 g = 0.45 kg
       const TRACK_D = 0.035; // Gauge width (clear space): 35 mm = 0.035 m
       const G_ACC = 9.81; // Gravitational acceleration (m/s^2)
-      const MU_H = 0.004; // Fixed static friction coefficient
 
       // Effective rolling radius due to 2-point rail contact
       let R_EFF = BALL_R;
-      // Rotational inertia factor for solid sphere rolling on rails
+      const BALL_INERTIA_FACTOR = 2 / 5;
+      // Effective mass factor for a solid sphere rolling on rails
       let F_ACC = 1.0;
 
       // 2. Track Geometry Parameters (7 Peaks = 6 Wave Segments across 100 cm)
@@ -277,6 +295,8 @@
       const MAG_FMAX_DEFAULT = 10.0;
       const MAG_FORCE_RATIO = Math.pow(MAG_REFERENCE_FORCE / MAG_FMAX_DEFAULT, 1 / MAG_EXPONENT);
       const MAG_R0 = (MAG_REFERENCE_DISTANCE * MAG_FORCE_RATIO) / (1 - MAG_FORCE_RATIO);
+      const MAGNET_RETRIGGER_COOLDOWN_MS = 1200;
+      const MAGNET_SENSOR_CLEAR_MARGIN = 0.02;
 
       // Positions of the two central hills (indices 2 and 4 out of 6 intervals)
       let MAG_POSITIONS = [];
@@ -302,10 +322,17 @@
         curvRadius: Infinity, // Local track curvature radius (meters)
       };
 
+      let energy = {
+        initial: 0,
+        current: 0,
+        magnetWork: 0,
+        loss: 0,
+      };
+
       // 5. Magnet Hardware & Coil State (Coil 0 and Coil 1)
       let magnets = [
-        { active: false, timer: 0, lockout: 0, x_center: 0 },
-        { active: false, timer: 0, lockout: 0, x_center: 0 },
+        { active: false, timer: 0, lockout: 0, cooldown: 0, armed: true, sensorClear: true, targetTipX: 0, x_center: 0 },
+        { active: false, timer: 0, lockout: 0, cooldown: 0, armed: true, sensorClear: true, targetTipX: 0, x_center: 0 },
       ];
 
       // Analytical track height function y(x)
@@ -328,13 +355,13 @@
       let totalArcLength = 0;
 
       function buildArcLengthTable() {
-        arcLengthTable = [{ x: 0, s: 0 }];
+        arcLengthTable = [{ x: TRACK_GEOMETRY_START_X, s: 0 }];
         totalArcLength = 0;
-        let previousX = 0;
+        let previousX = TRACK_GEOMETRY_START_X;
         let previousY = getTrackY(previousX);
 
         for (let index = 1; index <= ARC_LENGTH_STEPS; index++) {
-          const x = (TRACK_L * index) / ARC_LENGTH_STEPS;
+          const x = TRACK_GEOMETRY_START_X + ((TRACK_GEOMETRY_END_X - TRACK_GEOMETRY_START_X) * index) / ARC_LENGTH_STEPS;
           const y = getTrackY(x);
           const dx = x - previousX;
           const dy = y - previousY;
@@ -346,8 +373,9 @@
       }
 
       function getArcLengthAtX(x) {
-        const clampedX = Math.max(0, Math.min(TRACK_L, x));
-        const position = (clampedX / TRACK_L) * ARC_LENGTH_STEPS;
+        const clampedX = Math.max(TRACK_GEOMETRY_START_X, Math.min(TRACK_GEOMETRY_END_X, x));
+        const geometryLength = TRACK_GEOMETRY_END_X - TRACK_GEOMETRY_START_X;
+        const position = ((clampedX - TRACK_GEOMETRY_START_X) / geometryLength) * ARC_LENGTH_STEPS;
         const lowerIndex = Math.floor(position);
         const upperIndex = Math.min(ARC_LENGTH_STEPS, lowerIndex + 1);
         const fraction = position - lowerIndex;
@@ -374,26 +402,62 @@
         return lower.x + (upper.x - lower.x) * fraction;
       }
 
-      let TRACK_START_X = BALL_R;
-      let TRACK_END_X = TRACK_L - BALL_R;
+      let TRACK_GEOMETRY_START_X = 0;
+      let TRACK_GEOMETRY_END_X = TRACK_L;
+      let BALL_INITIAL_X = 0;
+      const BALL_START_OFFSET_X = 0.005;
       let TRACK_START_S = 0;
       let TRACK_END_S = 0;
+      let BALL_INITIAL_S = 0;
 
       function rebuildGeometry() {
         K_WAVE = ((NUM_PEAKS - 1) * Math.PI) / TRACK_L;
         R_EFF = BALL_R > TRACK_D / 2 ? Math.sqrt(Math.pow(BALL_R, 2) - Math.pow(TRACK_D / 2, 2)) : BALL_R;
-        F_ACC = 1.0 / (1.0 + 0.4 * Math.pow(BALL_R / R_EFF, 2));
+        F_ACC = 1.0 / (1.0 + BALL_INERTIA_FACTOR * Math.pow(BALL_R / R_EFF, 2));
         MAG_POSITIONS = [(2 * Math.PI) / K_WAVE, (4 * Math.PI) / K_WAVE];
 
+        TRACK_GEOMETRY_START_X = 0;
+        TRACK_GEOMETRY_END_X = TRACK_L;
         buildArcLengthTable();
-        TRACK_START_X = BALL_R;
-        TRACK_END_X = TRACK_L - BALL_R;
-        TRACK_START_S = getArcLengthAtX(TRACK_START_X);
-        TRACK_END_S = getArcLengthAtX(TRACK_END_X);
-        magnets = MAG_POSITIONS.map((xCenter) => ({ active: false, timer: 0, lockout: 0, x_center: xCenter }));
-        state.s = TRACK_START_S;
+        BALL_INITIAL_X = Math.min(TRACK_GEOMETRY_START_X + BALL_START_OFFSET_X, TRACK_GEOMETRY_END_X);
+        TRACK_START_S = getArcLengthAtX(TRACK_GEOMETRY_START_X);
+        TRACK_END_S = getArcLengthAtX(TRACK_GEOMETRY_END_X);
+        BALL_INITIAL_S = getArcLengthAtX(BALL_INITIAL_X);
+        magnets = MAG_POSITIONS.map((xCenter) => ({
+          active: false,
+          timer: 0,
+          lockout: 0,
+          cooldown: 0,
+          armed: true,
+          sensorClear: true,
+          targetTipX: 0,
+          x_center: xCenter,
+        }));
+        state.s = BALL_INITIAL_S;
         state.v = 0;
         updateCartesianCoordinates();
+        resetEnergyAccounting();
+      }
+
+      function getMagnetTipPositions(mag) {
+        const halfCore = 0.06;
+        return {
+          leftX: mag.x_center - halfCore,
+          rightX: mag.x_center + halfCore,
+        };
+      }
+
+      function updateMagnetRearmState(mag, dt) {
+        if (mag.cooldown > 0) mag.cooldown = Math.max(0, mag.cooldown - dt);
+
+        const { leftX, rightX } = getMagnetTipPositions(mag);
+        const leftDistance = Math.abs(getArcLengthAtX(leftX) - state.s);
+        const rightDistance = Math.abs(getArcLengthAtX(rightX) - state.s);
+        const nearestTipDistance = Math.min(leftDistance, rightDistance);
+        const clearDistance = cfg.sensorDist + MAGNET_SENSOR_CLEAR_MARGIN;
+
+        if (!mag.sensorClear && nearestTipDistance > clearDistance) mag.sensorClear = true;
+        if (!mag.armed && !mag.active && mag.cooldown <= 0 && mag.sensorClear) mag.armed = true;
       }
 
       rebuildGeometry();
@@ -408,6 +472,7 @@
 
         // Calculate local slope angle alpha
         let slope = getTrackSlope(state.x);
+        if (state.x <= TRACK_GEOMETRY_START_X + 1e-9 || state.x >= TRACK_GEOMETRY_END_X - 1e-9) slope = 0;
         state.alpha = Math.atan(slope);
 
         // Calculate analytical curvature radius R_k = (1 + (dy/dx)^2)^(3/2) / |d^2y/dx^2|
@@ -425,34 +490,40 @@
       function getForceFromMagnet(mag, ballX, ballV) {
         if (!cfg.magnetEnabled) return 0;
 
-        // Physical bounds of the 12cm core inside the hill (8cm coil + 2cm tip each side)
-        const halfCore = 0.06;
-        let leftTipX = mag.x_center - halfCore;
-        let rightTipX = mag.x_center + halfCore;
+        const { leftX: leftTipX, rightX: rightTipX } = getMagnetTipPositions(mag);
 
-        let targetTipX = 0;
+        let targetTipX = mag.active ? mag.targetTipX : 0;
 
         // Symmetrical logic: determine which pointed tip faces the approaching ball
-        if (ballX < mag.x_center) {
+        if (!mag.active && ballX < mag.x_center) {
           targetTipX = leftTipX; // Ball is approaching from the left
-        } else {
+        } else if (!mag.active) {
           targetTipX = rightTipX; // Ball is approaching from the right
         }
 
-        // Cartesian distance to targeted tip
+        // Cartesian distance and path distance to the targeted tip
         let targetTipY = getTrackY(targetTipX);
         let dx = targetTipX - ballX;
         let dy = targetTipY - state.y;
         let directDist = Math.sqrt(dx * dx + dy * dy);
+        let targetTipS = getArcLengthAtX(targetTipX);
+        let pathDistance = targetTipS - state.s;
 
         // Wired-OR Hardware emulation via spatial zones
-        // Sensor triggers when ball enters the 4cm zone around the pointed tip
-        if (!mag.active && mag.lockout <= 0 && Math.abs(dx) <= cfg.sensorDist && Math.abs(dx) > 0.002) {
-          // Enforce direction: only activate if moving towards the hill
-          if ((dx > 0 && ballV > 0) || (dx < 0 && ballV < 0)) {
+        // Sensor triggers by path distance and only while approaching the tip.
+        if (mag.armed && !mag.active && mag.lockout <= 0 && mag.cooldown <= 0 && !mag.sensorClear) {
+          mag.armed = false;
+        }
+
+        if (mag.armed && !mag.active && mag.lockout <= 0 && mag.cooldown <= 0 && Math.abs(pathDistance) <= cfg.sensorDist && Math.abs(pathDistance) > 0.002) {
+          if (pathDistance * ballV > 0) {
             mag.active = true;
+            mag.armed = false;
+            mag.sensorClear = false;
+            mag.targetTipX = targetTipX;
             mag.timer = cfg.timerMs / 1000.0; // Initialize cutoff timer (seconds)
             mag.lockout = cfg.timerMs / 1000.0 + 0.02; // Coil runtime plus 20ms cooldown
+            mag.cooldown = MAGNET_RETRIGGER_COOLDOWN_MS / 1000.0;
           }
         }
 
@@ -461,9 +532,10 @@
         // Spatial Kelvin-Force equation incorporating saturation limits and pointed geometry
         let forceMagnitude = (cfg.magFmax * Math.pow(MAG_R0, MAG_EXPONENT)) / Math.pow(directDist + MAG_R0, MAG_EXPONENT);
 
-        // Vector projection: translate raw spatial force onto the tangential path s
-        let forceAngle = Math.atan2(dy, dx);
-        let effectiveForce = forceMagnitude * Math.cos(forceAngle - state.alpha);
+        // Project the force vector from the ball center onto the path tangent.
+        let tangentX = Math.cos(state.alpha);
+        let tangentY = Math.sin(state.alpha);
+        let effectiveForce = forceMagnitude * ((dx * tangentX + dy * tangentY) / Math.max(directDist, 1e-9));
 
         return effectiveForce;
       }
@@ -471,10 +543,32 @@
       // PART 3: NUMERICAL CORE INTEGRATION ENGINE (EULER-CROMER)
       // ============================================================================
 
+      function getRotationalInertia() {
+        return BALL_INERTIA_FACTOR * BALL_M * Math.pow(BALL_R, 2);
+      }
+
+      function getKineticEnergy(velocity) {
+        let inertia = getRotationalInertia();
+        let angularVelocity = velocity / R_EFF;
+        return 0.5 * BALL_M * Math.pow(velocity, 2) + 0.5 * inertia * Math.pow(angularVelocity, 2);
+      }
+
+      function getMechanicalEnergy() {
+        return BALL_M * G_ACC * state.y + getKineticEnergy(state.v);
+      }
+
+      function resetEnergyAccounting() {
+        energy.current = getMechanicalEnergy();
+        energy.initial = energy.current;
+        energy.magnetWork = 0;
+        energy.loss = 0;
+      }
+
       function stepSimulation(dt) {
         // 1. Process Hardware Cooldown and Cutoff Timers
         magnets.forEach((mag) => {
           if (mag.lockout > 0) mag.lockout -= dt;
+          updateMagnetRearmState(mag, dt);
           if (mag.active) {
             mag.timer -= dt;
             if (mag.timer <= 0) mag.active = false; // Hard shutdown via Timer
@@ -483,16 +577,6 @@
 
         // 2. Map position to horizontal plane
         updateCartesianCoordinates();
-
-        // The rail ends guide the ball back onto the track without energy loss.
-        if (state.s < TRACK_START_S) {
-          state.s = TRACK_START_S;
-          if (state.v < 0) state.v = -state.v;
-        }
-        if (state.s > TRACK_END_S) {
-          state.s = TRACK_END_S;
-          if (state.v > 0) state.v = -state.v;
-        }
 
         // 3. Gravity component along the true tangential vector
         let F_gravity = -BALL_M * G_ACC * Math.sin(state.alpha);
@@ -516,27 +600,31 @@
 
         // 6. Environmental Losses (Velocity Dependent)
         let Area = Math.PI * Math.pow(BALL_R, 2);
-        let F_Air = -0.5 * cfg.rho_air * Area * cfg.cw * state.v * Math.abs(state.v);
-        let F_Friction = -cfg.mu_r * F_Normal * Math.sign(state.v);
+        let F_air = -0.5 * cfg.rho_air * Area * cfg.cw * state.v * Math.abs(state.v);
+        let F_roll = -cfg.mu_r * F_Normal * Math.sign(state.v);
 
         // Total active force sum acting along path s
-        let F_Total = F_gravity + F_Magnet + F_Air + F_Friction;
-
-        // 7. Stiction / Haftreibung Kriterium (Prevent endless microscopic sliding)
-        const VELOCITY_THRESHOLD = 0.01; // 1 cm/s
-        let maxStictionForce = MU_H * F_Normal;
-
-        if (Math.abs(state.v) < VELOCITY_THRESHOLD && Math.abs(F_gravity + F_Magnet) < maxStictionForce) {
-          state.v = 0.0; // Total physical lock
-          return;
-        }
-
-        // 8. Rotational Acceleration Correction (f_acc updates dynamic angular speed)
-        let acceleration = (F_Total / BALL_M) * F_ACC;
+        let F_Total = F_gravity + F_Magnet + F_air + F_roll;
+        let acceleration = F_Total / (BALL_M * (1 + getRotationalInertia() / (BALL_M * Math.pow(R_EFF, 2))));
+        let previousS = state.s;
 
         // Semi-Implicit Euler integration for maximum conservation energy stability
         state.v += acceleration * dt;
         state.s += state.v * dt;
+
+        // A real open end stops the ball and removes its remaining kinetic energy.
+        let reachedBoundary = state.s < TRACK_START_S || state.s > TRACK_END_S;
+        if (reachedBoundary) {
+          state.s = Math.max(TRACK_START_S, Math.min(TRACK_END_S, state.s));
+          energy.loss += getKineticEnergy(state.v);
+          state.v = 0;
+        }
+
+        let deltaS = state.s - previousS;
+        energy.magnetWork += F_Magnet * deltaS;
+        energy.loss += Math.max(0, -(F_roll + F_air) * deltaS);
+        updateCartesianCoordinates();
+        energy.current = getMechanicalEnergy();
       }
       // ============================================================================
       // PART 5: CANVAS RENDERING ENGINE & ANIMATION LOOP
@@ -621,7 +709,7 @@
 
         // Draw ball body above the rail.
         ctx.save();
-        ctx.translate(bx, by - BALL_R * 0.6 * SCALE_Y);
+        ctx.translate(bx, by - BALL_R * SCALE_X);
         ctx.fillStyle = 'radial-gradient(circle at 30% 30%, #cbd5e1 0%, #475569 80%)';
 
         // Simple steel gradient effect
@@ -646,6 +734,9 @@
         v: { min: Infinity, max: -Infinity },
         fn: { min: Infinity, max: -Infinity },
         fcf: { min: Infinity, max: -Infinity },
+        energy: { min: Infinity, max: -Infinity },
+        magnetWork: { min: Infinity, max: -Infinity },
+        energyLoss: { min: Infinity, max: -Infinity },
       };
 
       function syncConfigurationFromUI() {
@@ -677,7 +768,18 @@
         let F_N_static = BALL_M * G_ACC * Math.cos(state.alpha);
         let F_cf = state.curvRadius !== Infinity ? (BALL_M * Math.pow(state.v, 2)) / state.curvRadius : 0;
         const currentFn = Math.max(0, F_N_static + F_cf);
-        const values = { x: currentX, v: currentV, fn: currentFn, fcf: F_cf };
+        const currentEnergy = energy.current;
+        const currentMagnetWork = energy.magnetWork;
+        const currentEnergyLoss = energy.loss;
+        const values = {
+          x: currentX,
+          v: currentV,
+          fn: currentFn,
+          fcf: F_cf,
+          energy: currentEnergy,
+          magnetWork: currentMagnetWork,
+          energyLoss: currentEnergyLoss,
+        };
         Object.entries(values).forEach(([key, value]) => {
           telemetryStats[key].min = Math.min(telemetryStats[key].min, value);
           telemetryStats[key].max = Math.max(telemetryStats[key].max, value);
@@ -695,6 +797,15 @@
         document.getElementById('tel-fn-max').innerText = telemetryStats.fn.max.toFixed(2);
         document.getElementById('tel-fcf-min').innerText = telemetryStats.fcf.min.toFixed(2);
         document.getElementById('tel-fcf-max').innerText = telemetryStats.fcf.max.toFixed(2);
+        document.getElementById('tel-energy').innerText = currentEnergy.toFixed(3);
+        document.getElementById('tel-energy-min').innerText = telemetryStats.energy.min.toFixed(3);
+        document.getElementById('tel-energy-max').innerText = telemetryStats.energy.max.toFixed(3);
+        document.getElementById('tel-magnet-work').innerText = currentMagnetWork.toFixed(3);
+        document.getElementById('tel-magnet-work-min').innerText = telemetryStats.magnetWork.min.toFixed(3);
+        document.getElementById('tel-magnet-work-max').innerText = telemetryStats.magnetWork.max.toFixed(3);
+        document.getElementById('tel-energy-loss').innerText = currentEnergyLoss.toFixed(3);
+        document.getElementById('tel-energy-loss-min').innerText = telemetryStats.energyLoss.min.toFixed(3);
+        document.getElementById('tel-energy-loss-max').innerText = telemetryStats.energyLoss.max.toFixed(3);
       }
 
       function resetTelemetry() {
@@ -758,23 +869,32 @@
       }
 
       // Attach Event Listeners to UI Elements
-      function resetSimulation() {
-        state.s = TRACK_START_S;
+      function setBallAtStart() {
+        state.s = BALL_INITIAL_S;
         state.v = 0.0;
         magnets.forEach((m) => {
           m.active = false;
           m.timer = 0;
           m.lockout = 0;
+          m.cooldown = 0;
+          m.armed = true;
+          m.sensorClear = true;
+          m.targetTipX = 0;
         });
         updateCartesianCoordinates();
+        resetEnergyAccounting();
         resetTelemetry();
         updateTelemetry();
+      }
+
+      function resetSimulation() {
+        setBallAtStart();
       }
 
       document.getElementById('btn-reset').addEventListener('click', resetSimulation);
 
       document.getElementById('btn-push').addEventListener('click', () => {
-        state.v += 0.3; // Inject linear kinetic energy bump
+        setBallAtStart();
       });
 
       const geometryInputIds = ['param-amplitude', 'param-peaks', 'param-diameter', 'param-mass', 'param-track-length'];
