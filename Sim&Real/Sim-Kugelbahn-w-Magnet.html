@@ -32,12 +32,31 @@
         border: 1px solid #3a3a4a;
       }
       .dashboard {
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 20px;
         background: #22222c;
         padding: 15px;
         border-radius: 8px;
+      }
+      .tab-bar {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 8px;
+        margin-bottom: 15px;
+      }
+      .tab-button {
+        padding: 10px;
+        background: #4e4e5a;
+        color: white;
+      }
+      .tab-button.active {
+        background: #4a90e2;
+      }
+      .tab-panel {
+        display: none;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 20px;
+      }
+      .tab-panel.active {
+        display: grid;
       }
       .control-group {
         display: flex;
@@ -94,6 +113,23 @@
         justify-content: space-around;
         color: #00ff66;
       }
+      .telemetry-table {
+        grid-column: span 3;
+        width: 100%;
+        border-collapse: collapse;
+        color: #00ff66;
+        font-family: monospace;
+      }
+      .telemetry-table th,
+      .telemetry-table td {
+        padding: 8px;
+        border-bottom: 1px solid #3a3a4a;
+        text-align: right;
+      }
+      .telemetry-table th:first-child,
+      .telemetry-table td:first-child {
+        text-align: left;
+      }
     </style>
   </head>
   <body>
@@ -104,83 +140,146 @@
       <canvas id="simCanvas" width="1000" height="400"></canvas>
 
       <div class="dashboard">
-        <!-- Spulen & Sensor Steuerung -->
-        <div class="control-group">
-          <label><span>⏱️ Spulen-Timer (Abschalten):</span><span id="v-timer">40 ms</span></label>
-          <input type="range" id="param-timer" min="10" max="150" step="1" value="40" />
-        </div>
-        <div class="control-group">
-          <label><span>📍 Hallsensor-Position (Reichweite):</span><span id="v-sensor">4.0 cm</span></label>
-          <input type="range" id="param-sensor" min="1.0" max="8.0" step="0.1" value="4.0" />
-        </div>
-        <div class="control-group">
-          <label><span>⚡ Magnet-Power (F_max):</span><span id="v-fmax">22.5 N</span></label>
-          <input type="range" id="param-fmax" min="0.0" max="50.0" step="0.5" value="22.5" />
+        <div class="tab-bar" role="tablist">
+          <button class="tab-button active" data-tab="track-panel" role="tab">Bahn</button>
+          <button class="tab-button" data-tab="damping-panel" role="tab">Dämpfung</button>
+          <button class="tab-button" data-tab="magnet-panel" role="tab">Magnet</button>
+          <button class="tab-button" data-tab="telemetry-panel" role="tab">Telemetrie</button>
         </div>
 
-        <!-- Physikalische Dämpfung -->
-        <div class="control-group">
-          <label><span>🪵 Rollreibung (µ_R):</span><span id="v-mur">0.0020</span></label>
-          <input type="range" id="param-mur" min="0.0005" max="0.0050" step="0.0001" value="0.0020" />
-        </div>
-        <div class="control-group">
-          <label><span>💨 Luftwiderstand (c_w):</span><span id="v-cw">0.47</span></label>
-          <input type="range" id="param-cw" min="0.10" max="1.00" step="0.05" value="0.47" />
-        </div>
-        <div class="control-group" style="justify-content: center; align-items: center">
-          <label style="margin: 0"><input type="checkbox" id="param-em-toggle" checked /> Booster-System Aktiv</label>
+        <div class="tab-panel active" id="track-panel" role="tabpanel">
+          <div class="control-group">
+            <label><span>Amplitude:</span><span id="v-amplitude">2.0 cm</span></label>
+            <input type="range" id="param-amplitude" min="0.5" max="5.0" step="0.1" value="2.0" />
+          </div>
+          <div class="control-group">
+            <label><span>Wellenberge:</span><span id="v-peaks">7</span></label>
+            <input type="range" id="param-peaks" min="6" max="12" step="1" value="7" />
+          </div>
+          <div class="control-group">
+            <label><span>Kugel-Durchmesser:</span><span id="v-diameter">4.8 cm</span></label>
+            <input type="range" id="param-diameter" min="3.6" max="8.0" step="0.1" value="4.8" />
+          </div>
+          <div class="control-group">
+            <label><span>Kugel-Gewicht:</span><span id="v-mass">450 g</span></label>
+            <input type="range" id="param-mass" min="50" max="1000" step="10" value="450" />
+          </div>
+          <div class="control-group">
+            <label><span>Horizontale Bahnlänge:</span><span id="v-length">100 cm</span></label>
+            <input type="range" id="param-track-length" min="50" max="200" step="1" value="100" />
+          </div>
         </div>
 
-        <!-- Telemetrie-Anzeige -->
-        <div class="telemetry">
-          <div>Position X: <span id="tel-x">0.00</span> m</div>
-          <div>Geschw. v: <span id="tel-v">0.00</span> m/s</div>
-          <div>Normalkraft F_N: <span id="tel-fn">0.00</span> N</div>
-          <div>Fliehkraft F_cf: <span id="tel-fcf">0.00</span> N</div>
+        <div class="tab-panel" id="damping-panel" role="tabpanel">
+          <div class="control-group">
+            <label><span>Rollreibung (µ_R):</span><span id="v-mur">0.0020</span></label>
+            <input type="range" id="param-mur" min="0.0005" max="0.0050" step="0.0001" value="0.0020" />
+          </div>
+          <div class="control-group">
+            <label><span>Luftwiderstand (c_w):</span><span id="v-cw">0.47</span></label>
+            <input type="range" id="param-cw" min="0.10" max="1.00" step="0.05" value="0.47" />
+          </div>
         </div>
 
-        <!-- Buttons -->
+        <div class="tab-panel" id="magnet-panel" role="tabpanel">
+          <div class="control-group">
+            <label><span>Magnet-Force (F_max):</span><span id="v-fmax">10.0 N</span></label>
+            <input type="range" id="param-fmax" min="0.0" max="10.0" step="0.1" value="10.0" />
+          </div>
+          <div class="control-group">
+            <label><span>Spulen-Timer:</span><span id="v-timer">40 ms</span></label>
+            <input type="range" id="param-timer" min="10" max="150" step="1" value="40" />
+          </div>
+          <div class="control-group">
+            <label><span>Hallsensor-Reichweite:</span><span id="v-sensor">4.0 cm</span></label>
+            <input type="range" id="param-sensor" min="1.0" max="8.0" step="0.1" value="4.0" />
+          </div>
+          <div class="control-group" style="justify-content: center; align-items: center">
+            <label style="margin: 0"><input type="checkbox" id="param-em-toggle" checked /> Booster-System Aktiv</label>
+          </div>
+        </div>
+
+        <div class="tab-panel" id="telemetry-panel" role="tabpanel">
+          <table class="telemetry-table">
+            <thead>
+              <tr>
+                <th>Messwert</th>
+                <th>Aktuell</th>
+                <th>Min</th>
+                <th>Max</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Position X (m)</td>
+                <td id="tel-x">0.000</td>
+                <td id="tel-x-min">0.000</td>
+                <td id="tel-x-max">0.000</td>
+              </tr>
+              <tr>
+                <td>Geschwindigkeit v (m/s)</td>
+                <td id="tel-v">0.00</td>
+                <td id="tel-v-min">0.00</td>
+                <td id="tel-v-max">0.00</td>
+              </tr>
+              <tr>
+                <td>Normalkraft F_N (N)</td>
+                <td id="tel-fn">0.00</td>
+                <td id="tel-fn-min">0.00</td>
+                <td id="tel-fn-max">0.00</td>
+              </tr>
+              <tr>
+                <td>Fliehkraft F_cf (N)</td>
+                <td id="tel-fcf">0.00</td>
+                <td id="tel-fcf-min">0.00</td>
+                <td id="tel-fcf-max">0.00</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
         <div class="btn-panel">
-          <button class="btn-primary" id="btn-reset">Reset Kugel (v=0)</button>
+          <button class="btn-primary" id="btn-reset">Reset Kugel & Min/Max</button>
           <button class="btn-secondary" id="btn-push">Kugel anstupsen (+0.3 m/s)</button>
         </div>
       </div>
     </div>
 
     <script>
+      // Generated by Copilot
       // Hier werden die Scripte aus Teil 1, 2 und 3 eingefügt!
       // ============================================================================
       // PART 1: PHYSICS CONSTANTS, TRACK GEOMETRY & SYSTEM STATE
       // ============================================================================
 
       // 1. Fixed Mechanical Constants (Homogeneous Solid Steel Sphere)
-      const BALL_R = 0.024; // Outer radius: 2.4 cm = 0.024 m
-      const BALL_M = 0.45; // Mass: 450 g = 0.45 kg
+      let BALL_R = 0.024; // Outer radius: 2.4 cm = 0.024 m
+      let BALL_M = 0.45; // Mass: 450 g = 0.45 kg
       const TRACK_D = 0.035; // Gauge width (clear space): 35 mm = 0.035 m
       const G_ACC = 9.81; // Gravitational acceleration (m/s^2)
+      const MU_H = 0.004; // Fixed static friction coefficient
 
       // Effective rolling radius due to 2-point rail contact
-      const R_EFF = Math.sqrt(Math.pow(BALL_R, 2) - Math.pow(TRACK_D / 2, 2));
+      let R_EFF = BALL_R;
       // Rotational inertia factor for solid sphere rolling on rails
-      const F_ACC = 1.0 / (1.0 + 0.4 * Math.pow(BALL_R / R_EFF, 2));
+      let F_ACC = 1.0;
 
       // 2. Track Geometry Parameters (7 Peaks = 6 Wave Segments across 100 cm)
-      const TRACK_L = 1.0; // Total length: 100 cm = 1.0 m
-      const NUM_PEAKS = 7;
-      const AMPLITUDE = 0.02; // Vertical amplitude: 2.0 cm = 0.02 m
-      const K_WAVE = ((NUM_PEAKS - 1) * Math.PI) / TRACK_L;
+      let TRACK_L = 1.0; // Total length: 100 cm = 1.0 m
+      let NUM_PEAKS = 7;
+      let AMPLITUDE = 0.02; // Vertical amplitude: 2.0 cm = 0.02 m
+      let K_WAVE = ((NUM_PEAKS - 1) * Math.PI) / TRACK_L;
 
       // 3. Calibrated Saturated Magnet Parameters (Saturated Core + Pointed Tips)
       const MAG_EXPONENT = 4.0; // n=4 steep decline due to pointed focus
-      const MAG_R0 = 0.015; // Shape offset factor (meters) to avoid infinity
-      // F_MAX calibrated so that F(0.04m) slightly exceeds rolling friction (~0.05 N)
-      const MAG_FMAX = 22.5; // Theoretical peak holding force in Newtons at x=0
+      const MAG_REFERENCE_DISTANCE = 0.04;
+      const MAG_REFERENCE_FORCE = 0.05;
+      const MAG_FMAX_DEFAULT = 10.0;
+      const MAG_FORCE_RATIO = Math.pow(MAG_REFERENCE_FORCE / MAG_FMAX_DEFAULT, 1 / MAG_EXPONENT);
+      const MAG_R0 = (MAG_REFERENCE_DISTANCE * MAG_FORCE_RATIO) / (1 - MAG_FORCE_RATIO);
 
       // Positions of the two central hills (indices 2 and 4 out of 6 intervals)
-      const MAG_POSITIONS = [
-        (2 * Math.PI) / K_WAVE, // Summit of Hill 1 (~0.333 m)
-        (4 * Math.PI) / K_WAVE, // Summit of Hill 2 (~0.666 m)
-      ];
+      let MAG_POSITIONS = [];
 
       // Adjustable Control Variables (User Sliders / System Config)
       let cfg = {
@@ -189,12 +288,13 @@
         rho_air: 1.2, // Air density (kg/m^3)
         timerMs: 40.0, // Magnet cutoff timer in milliseconds
         sensorDist: 0.04, // Activation zone: 4 cm ahead of tip (meters)
+        magFmax: MAG_FMAX_DEFAULT,
         magnetEnabled: true, // Global toggle for the EM booster system
       };
 
       // 4. Dynamic Simulation State
       let state = {
-        s: R_EFF, // Position along the curved path (meters)
+        s: 0.0, // Position along the curved path (meters)
         v: 0.0, // Velocity along the path (m/s)
         x: 0.0, // Calculated screen X coordinate (meters)
         y: 0.0, // Calculated screen Y coordinate (meters)
@@ -204,8 +304,8 @@
 
       // 5. Magnet Hardware & Coil State (Coil 0 and Coil 1)
       let magnets = [
-        { active: false, timer: 0, lockout: 0, x_center: MAG_POSITIONS[0] },
-        { active: false, timer: 0, lockout: 0, x_center: MAG_POSITIONS[1] },
+        { active: false, timer: 0, lockout: 0, x_center: 0 },
+        { active: false, timer: 0, lockout: 0, x_center: 0 },
       ];
 
       // Analytical track height function y(x)
@@ -222,35 +322,89 @@
       function getTrackSecDerivative(x) {
         return -AMPLITUDE * Math.pow(K_WAVE, 2) * Math.cos(K_WAVE * x);
       }
+
+      const ARC_LENGTH_STEPS = 1000;
+      let arcLengthTable = [];
+      let totalArcLength = 0;
+
+      function buildArcLengthTable() {
+        arcLengthTable = [{ x: 0, s: 0 }];
+        totalArcLength = 0;
+        let previousX = 0;
+        let previousY = getTrackY(previousX);
+
+        for (let index = 1; index <= ARC_LENGTH_STEPS; index++) {
+          const x = (TRACK_L * index) / ARC_LENGTH_STEPS;
+          const y = getTrackY(x);
+          const dx = x - previousX;
+          const dy = y - previousY;
+          totalArcLength += Math.sqrt(dx * dx + dy * dy);
+          arcLengthTable.push({ x, s: totalArcLength });
+          previousX = x;
+          previousY = y;
+        }
+      }
+
+      function getArcLengthAtX(x) {
+        const clampedX = Math.max(0, Math.min(TRACK_L, x));
+        const position = (clampedX / TRACK_L) * ARC_LENGTH_STEPS;
+        const lowerIndex = Math.floor(position);
+        const upperIndex = Math.min(ARC_LENGTH_STEPS, lowerIndex + 1);
+        const fraction = position - lowerIndex;
+        const lower = arcLengthTable[lowerIndex];
+        const upper = arcLengthTable[upperIndex];
+        return lower.s + (upper.s - lower.s) * fraction;
+      }
+
+      function getXAtArcLength(s) {
+        const clampedS = Math.max(0, Math.min(totalArcLength, s));
+        let lowerIndex = 0;
+        let upperIndex = arcLengthTable.length - 1;
+
+        while (lowerIndex + 1 < upperIndex) {
+          const middleIndex = Math.floor((lowerIndex + upperIndex) / 2);
+          if (arcLengthTable[middleIndex].s <= clampedS) lowerIndex = middleIndex;
+          else upperIndex = middleIndex;
+        }
+
+        const lower = arcLengthTable[lowerIndex];
+        const upper = arcLengthTable[upperIndex];
+        const span = upper.s - lower.s;
+        const fraction = span > 0 ? (clampedS - lower.s) / span : 0;
+        return lower.x + (upper.x - lower.x) * fraction;
+      }
+
+      let TRACK_START_X = BALL_R;
+      let TRACK_END_X = TRACK_L - BALL_R;
+      let TRACK_START_S = 0;
+      let TRACK_END_S = 0;
+
+      function rebuildGeometry() {
+        K_WAVE = ((NUM_PEAKS - 1) * Math.PI) / TRACK_L;
+        R_EFF = BALL_R > TRACK_D / 2 ? Math.sqrt(Math.pow(BALL_R, 2) - Math.pow(TRACK_D / 2, 2)) : BALL_R;
+        F_ACC = 1.0 / (1.0 + 0.4 * Math.pow(BALL_R / R_EFF, 2));
+        MAG_POSITIONS = [(2 * Math.PI) / K_WAVE, (4 * Math.PI) / K_WAVE];
+
+        buildArcLengthTable();
+        TRACK_START_X = BALL_R;
+        TRACK_END_X = TRACK_L - BALL_R;
+        TRACK_START_S = getArcLengthAtX(TRACK_START_X);
+        TRACK_END_S = getArcLengthAtX(TRACK_END_X);
+        magnets = MAG_POSITIONS.map((xCenter) => ({ active: false, timer: 0, lockout: 0, x_center: xCenter }));
+        state.s = TRACK_START_S;
+        state.v = 0;
+        updateCartesianCoordinates();
+      }
+
+      rebuildGeometry();
       // ============================================================================
       // PART 2: TRACK GEOMETRY MATHEMATICS AND COORDINATE MAPPING
       // ============================================================================
 
       // Resolves path distance 's' back into real horizontal 'x' using step integration
       function updateCartesianCoordinates() {
-        let current_s = 0;
-        let current_x = 0;
-        const steps = 200;
-        const dx = state.s / steps;
-
-        // Numerical integration to map arc length s to horizontal x
-        for (let i = 0; i < steps; i++) {
-          let slope = getTrackSlope(current_x);
-          let ds = Math.sqrt(1 + Math.pow(slope, 2)) * dx;
-          current_s += ds;
-          if (current_s >= state.s) {
-            current_x += dx * ((state.s - (current_s - ds)) / ds);
-            break;
-          }
-          current_x += dx;
-        }
-
-        // Boundary constraints
-        if (current_x < BALL_R) current_x = BALL_R;
-        if (current_x > TRACK_L - BALL_R) current_x = TRACK_L - BALL_R;
-
-        state.x = current_x;
-        state.y = getTrackY(current_x);
+        state.x = getXAtArcLength(state.s);
+        state.y = getTrackY(state.x);
 
         // Calculate local slope angle alpha
         let slope = getTrackSlope(state.x);
@@ -269,7 +423,7 @@
 
       // Calculates the precise distance vector from the ball to a pointed magnet tip
       function getForceFromMagnet(mag, ballX, ballV) {
-        if (!cfg.magnetEnabled || mag.lockout > 0) return 0;
+        if (!cfg.magnetEnabled) return 0;
 
         // Physical bounds of the 12cm core inside the hill (8cm coil + 2cm tip each side)
         const halfCore = 0.06;
@@ -277,15 +431,12 @@
         let rightTipX = mag.x_center + halfCore;
 
         let targetTipX = 0;
-        let targetSlopeSign = 1;
 
         // Symmetrical logic: determine which pointed tip faces the approaching ball
         if (ballX < mag.x_center) {
           targetTipX = leftTipX; // Ball is approaching from the left
-          targetSlopeSign = 1; // Pulls forward along positive s
         } else {
           targetTipX = rightTipX; // Ball is approaching from the right
-          targetSlopeSign = -1; // Pulls backward along negative s
         }
 
         // Cartesian distance to targeted tip
@@ -296,19 +447,19 @@
 
         // Wired-OR Hardware emulation via spatial zones
         // Sensor triggers when ball enters the 4cm zone around the pointed tip
-        if (!mag.active && Math.abs(dx) <= cfg.sensorDist && Math.abs(dx) > 0.002) {
+        if (!mag.active && mag.lockout <= 0 && Math.abs(dx) <= cfg.sensorDist && Math.abs(dx) > 0.002) {
           // Enforce direction: only activate if moving towards the hill
           if ((dx > 0 && ballV > 0) || (dx < 0 && ballV < 0)) {
             mag.active = true;
             mag.timer = cfg.timerMs / 1000.0; // Initialize cutoff timer (seconds)
-            mag.lockout = 0.06; // 60ms blinding loop to protect against EM fields
+            mag.lockout = cfg.timerMs / 1000.0 + 0.02; // Coil runtime plus 20ms cooldown
           }
         }
 
         if (!mag.active) return 0;
 
         // Spatial Kelvin-Force equation incorporating saturation limits and pointed geometry
-        let forceMagnitude = (MAG_FMAX * Math.pow(MAG_R0, MAG_EXPONENT)) / Math.pow(directDist + MAG_R0, MAG_EXPONENT);
+        let forceMagnitude = (cfg.magFmax * Math.pow(MAG_R0, MAG_EXPONENT)) / Math.pow(directDist + MAG_R0, MAG_EXPONENT);
 
         // Vector projection: translate raw spatial force onto the tangential path s
         let forceAngle = Math.atan2(dy, dx);
@@ -333,19 +484,14 @@
         // 2. Map position to horizontal plane
         updateCartesianCoordinates();
 
-        // Reales Überrollen: Check if ball flew out of bounds over the edges
-        if (state.x <= BALL_R + 0.001 || state.x >= TRACK_L - BALL_R - 0.001) {
-          // Ball left the track. Remove artificial borders.
-          // Implement free fall or end execution. Here we trigger an exit condition:
-          if (state.x <= BALL_R) {
-            state.v = Math.abs(state.v) * 0.4;
-            state.s = BALL_R + 0.005;
-          }
-          if (state.x >= TRACK_L - BALL_R) {
-            state.v = -Math.abs(state.v) * 0.4;
-            state.s = state.s - 0.005;
-          }
-          return;
+        // The rail ends guide the ball back onto the track without energy loss.
+        if (state.s < TRACK_START_S) {
+          state.s = TRACK_START_S;
+          if (state.v < 0) state.v = -state.v;
+        }
+        if (state.s > TRACK_END_S) {
+          state.s = TRACK_END_S;
+          if (state.v > 0) state.v = -state.v;
         }
 
         // 3. Gravity component along the true tangential vector
@@ -358,7 +504,9 @@
           // Valleys generate positive downforce, peaks reduce downforce
           F_N_dynamic = (BALL_M * Math.pow(state.v, 2)) / state.curvRadius;
         }
-        let F_Normal = Math.max(0, F_N_static + F_N_dynamic); // Normal force cannot be negative
+        // The rails constrain the ball on the track, so contact loss at a crest
+        // does not switch to free flight. Only open track ends do that.
+        let F_Normal = Math.max(0, F_N_static + F_N_dynamic);
 
         // 5. Active EM Accelerator Forces
         let F_Magnet = 0;
@@ -376,7 +524,7 @@
 
         // 7. Stiction / Haftreibung Kriterium (Prevent endless microscopic sliding)
         const VELOCITY_THRESHOLD = 0.01; // 1 cm/s
-        let maxStictionForce = 1.5 * cfg.mu_r * F_Normal; // μ_H is roughly 1.5x μ_R
+        let maxStictionForce = MU_H * F_Normal;
 
         if (Math.abs(state.v) < VELOCITY_THRESHOLD && Math.abs(F_gravity + F_Magnet) < maxStictionForce) {
           state.v = 0.0; // Total physical lock
@@ -399,12 +547,13 @@
 
       // Pixel mapping scales: Track is 100cm (1.0m) wide.
       // Canvas width is 1000px -> 1000 pixels per meter (10px = 1cm)
-      const SCALE_X = 1000;
+      let SCALE_X = 1000;
       const SCALE_Y = 2500; // Exaggerate vertical 2cm amplitude for crisp visibility
       const OFFSET_X = 0;
       const OFFSET_Y = 200; // Center line of the wave at Y=200px
 
       function drawSimulation() {
+        SCALE_X = canvas.width / TRACK_L;
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
         // 1. Draw Wooden Support Base & Cutout Groove
@@ -415,30 +564,32 @@
         magnets.forEach((mag) => {
           let cx = mag.x_center * SCALE_X;
           let cy = OFFSET_Y - getTrackY(mag.x_center) * SCALE_Y;
+          const coilOffset = 0.04 * SCALE_X;
+          const tipOffset = 0.06 * SCALE_X;
 
           // Draw 8cm Coil Body
           ctx.fillStyle = mag.active ? '#ff3300' : '#d97706'; // Glows red when active
-          ctx.fillRect(cx - 40, cy + 5, 80, 25);
+          ctx.fillRect(cx - coilOffset, cy + 5, coilOffset * 2, 25);
 
           // Draw 12mm Iron Core with 2cm pointed extensions on both ends
           ctx.fillStyle = '#64748b';
           ctx.beginPath();
           // Left pointed tip
-          ctx.moveTo(cx - 60, cy + 17);
-          ctx.lineTo(cx - 40, cy + 10);
-          ctx.lineTo(cx + 40, cy + 10);
+          ctx.moveTo(cx - tipOffset, cy + 17);
+          ctx.lineTo(cx - coilOffset, cy + 10);
+          ctx.lineTo(cx + coilOffset, cy + 10);
           // Right pointed tip
-          ctx.lineTo(cx + 60, cy + 17);
-          ctx.lineTo(cx + 40, cy + 25);
-          ctx.lineTo(cx - 40, cy + 25);
+          ctx.lineTo(cx + tipOffset, cy + 17);
+          ctx.lineTo(cx + coilOffset, cy + 25);
+          ctx.lineTo(cx - coilOffset, cy + 25);
           ctx.closePath();
           ctx.fill();
 
           // Symmetrical Wired-OR Hallsensors (Small pink dots at the 4cm trigger zones)
           ctx.fillStyle = '#ec4899';
           ctx.beginPath();
-          ctx.arc(cx - 60, OFFSET_Y - getTrackY(mag.x_center - 0.06) * SCALE_Y, 4, 0, Math.PI * 2);
-          ctx.arc(cx + 60, OFFSET_Y - getTrackY(mag.x_center + 0.06) * SCALE_Y, 4, 0, Math.PI * 2);
+          ctx.arc(cx - tipOffset, OFFSET_Y - getTrackY(mag.x_center - 0.06) * SCALE_Y, 4, 0, Math.PI * 2);
+          ctx.arc(cx + tipOffset, OFFSET_Y - getTrackY(mag.x_center + 0.06) * SCALE_Y, 4, 0, Math.PI * 2);
           ctx.fill();
 
           // Draw dynamic magnetic force field lines if active
@@ -446,8 +597,8 @@
             ctx.strokeStyle = 'rgba(255, 51, 0, 0.3)';
             ctx.lineWidth = 2;
             ctx.beginPath();
-            ctx.arc(cx - 60, cy + 17, 25, 0, Math.PI * 2);
-            ctx.arc(cx + 60, cy + 17, 25, 0, Math.PI * 2);
+            ctx.arc(cx - tipOffset, cy + 17, 25, 0, Math.PI * 2);
+            ctx.arc(cx + tipOffset, cy + 17, 25, 0, Math.PI * 2);
             ctx.stroke();
           }
         });
@@ -468,9 +619,9 @@
         let bx = state.x * SCALE_X;
         let by = OFFSET_Y - state.y * SCALE_Y;
 
-        // Draw ball body (offset upwards by effective contact height)
+        // Draw ball body above the rail.
         ctx.save();
-        ctx.translate(bx, by - BALL_R * 0.6 * SCALE_Y); // visual compression adjustment
+        ctx.translate(bx, by - BALL_R * 0.6 * SCALE_Y);
         ctx.fillStyle = 'radial-gradient(circle at 30% 30%, #cbd5e1 0%, #475569 80%)';
 
         // Simple steel gradient effect
@@ -490,55 +641,168 @@
       // ============================================================================
 
       // Link DOM inputs to live configuration memory
-      function syncUserInterface() {
+      const telemetryStats = {
+        x: { min: Infinity, max: -Infinity },
+        v: { min: Infinity, max: -Infinity },
+        fn: { min: Infinity, max: -Infinity },
+        fcf: { min: Infinity, max: -Infinity },
+      };
+
+      function syncConfigurationFromUI() {
         cfg.timerMs = parseFloat(document.getElementById('param-timer').value);
-        document.getElementById('v-timer').innerText = cfg.timerMs + ' ms';
-
         cfg.sensorDist = parseFloat(document.getElementById('param-sensor').value) / 100.0; // cm to m
-        document.getElementById('v-sensor').innerText = (cfg.sensorDist * 100).toFixed(1) + ' cm';
-
-        const fmaxVal = parseFloat(document.getElementById('param-fmax').value);
-        document.getElementById('v-fmax').innerText = fmaxVal.toFixed(1) + ' N';
-        // Update global F_MAX constant dynamically
-        // (Note: In Part 1 it was declared const, for slider-tuning it behaves as a global)
-        // To ensure compatibility, we assign it directly to our internal solver variable:
-        window.MAG_FMAX_DYNAMIC = fmaxVal;
-
+        cfg.magFmax = parseFloat(document.getElementById('param-fmax').value);
         cfg.mu_r = parseFloat(document.getElementById('param-mur').value);
-        document.getElementById('v-mur').innerText = cfg.mu_r.toFixed(4);
-
         cfg.cw = parseFloat(document.getElementById('param-cw').value);
-        document.getElementById('v-cw').innerText = cfg.cw.toFixed(2);
-
         cfg.magnetEnabled = document.getElementById('param-em-toggle').checked;
 
-        // Telemetry updates
-        document.getElementById('tel-x').innerText = state.x.toFixed(3);
-        document.getElementById('tel-v').innerText = state.v.toFixed(2);
+        const nextAmplitude = parseFloat(document.getElementById('param-amplitude').value) / 100.0;
+        const nextPeaks = parseInt(document.getElementById('param-peaks').value, 10);
+        const nextBallRadius = parseFloat(document.getElementById('param-diameter').value) / 200.0;
+        const nextBallMass = parseFloat(document.getElementById('param-mass').value) / 1000.0;
+        const nextTrackLength = parseFloat(document.getElementById('param-track-length').value) / 100.0;
+        const geometryChanged = nextAmplitude !== AMPLITUDE || nextPeaks !== NUM_PEAKS || nextBallRadius !== BALL_R || nextBallMass !== BALL_M || nextTrackLength !== TRACK_L;
+        AMPLITUDE = nextAmplitude;
+        NUM_PEAKS = nextPeaks;
+        BALL_R = nextBallRadius;
+        BALL_M = nextBallMass;
+        TRACK_L = nextTrackLength;
+        return geometryChanged;
+      }
+
+      function updateTelemetry() {
+        const currentX = state.x;
+        const currentV = state.v;
 
         let F_N_static = BALL_M * G_ACC * Math.cos(state.alpha);
         let F_cf = state.curvRadius !== Infinity ? (BALL_M * Math.pow(state.v, 2)) / state.curvRadius : 0;
-        document.getElementById('tel-fn').innerText = Math.max(0, F_N_static + F_cf).toFixed(2);
+        const currentFn = Math.max(0, F_N_static + F_cf);
+        const values = { x: currentX, v: currentV, fn: currentFn, fcf: F_cf };
+        Object.entries(values).forEach(([key, value]) => {
+          telemetryStats[key].min = Math.min(telemetryStats[key].min, value);
+          telemetryStats[key].max = Math.max(telemetryStats[key].max, value);
+        });
+
+        document.getElementById('tel-x').innerText = currentX.toFixed(3);
+        document.getElementById('tel-v').innerText = currentV.toFixed(2);
+        document.getElementById('tel-fn').innerText = currentFn.toFixed(2);
         document.getElementById('tel-fcf').innerText = F_cf.toFixed(2);
+        document.getElementById('tel-x-min').innerText = telemetryStats.x.min.toFixed(3);
+        document.getElementById('tel-x-max').innerText = telemetryStats.x.max.toFixed(3);
+        document.getElementById('tel-v-min').innerText = telemetryStats.v.min.toFixed(2);
+        document.getElementById('tel-v-max').innerText = telemetryStats.v.max.toFixed(2);
+        document.getElementById('tel-fn-min').innerText = telemetryStats.fn.min.toFixed(2);
+        document.getElementById('tel-fn-max').innerText = telemetryStats.fn.max.toFixed(2);
+        document.getElementById('tel-fcf-min').innerText = telemetryStats.fcf.min.toFixed(2);
+        document.getElementById('tel-fcf-max').innerText = telemetryStats.fcf.max.toFixed(2);
+      }
+
+      function resetTelemetry() {
+        Object.values(telemetryStats).forEach((stats) => {
+          stats.min = Infinity;
+          stats.max = -Infinity;
+        });
+      }
+
+      function syncUserInterface() {
+        document.getElementById('v-amplitude').innerText = (AMPLITUDE * 100).toFixed(1) + ' cm';
+        document.getElementById('v-peaks').innerText = NUM_PEAKS;
+        document.getElementById('v-diameter').innerText = (BALL_R * 200).toFixed(1) + ' cm';
+        document.getElementById('v-mass').innerText = (BALL_M * 1000).toFixed(0) + ' g';
+        document.getElementById('v-length').innerText = (TRACK_L * 100).toFixed(0) + ' cm';
+        document.getElementById('v-timer').innerText = cfg.timerMs + ' ms';
+        document.getElementById('v-sensor').innerText = (cfg.sensorDist * 100).toFixed(1) + ' cm';
+        document.getElementById('v-fmax').innerText = cfg.magFmax.toFixed(1) + ' N';
+        document.getElementById('v-mur').innerText = cfg.mu_r.toFixed(4);
+        document.getElementById('v-cw').innerText = cfg.cw.toFixed(2);
+        updateTelemetry();
+      }
+
+      const CONFIG_STORAGE_KEY = 'sinusPerpetuum.simulator.config';
+
+      function restoreSavedConfig() {
+        const savedConfig = localStorage.getItem(CONFIG_STORAGE_KEY);
+        if (!savedConfig) return;
+
+        const parsedConfig = JSON.parse(savedConfig);
+        if (Number.isFinite(parsedConfig.timerMs)) document.getElementById('param-timer').value = parsedConfig.timerMs;
+        if (Number.isFinite(parsedConfig.sensorDist)) document.getElementById('param-sensor').value = parsedConfig.sensorDist * 100;
+        if (Number.isFinite(parsedConfig.magFmax)) document.getElementById('param-fmax').value = parsedConfig.magFmax;
+        if (Number.isFinite(parsedConfig.mu_r)) document.getElementById('param-mur').value = parsedConfig.mu_r;
+        if (Number.isFinite(parsedConfig.cw)) document.getElementById('param-cw').value = parsedConfig.cw;
+        if (Number.isFinite(parsedConfig.amplitudeCm)) document.getElementById('param-amplitude').value = parsedConfig.amplitudeCm;
+        if (Number.isFinite(parsedConfig.numPeaks)) document.getElementById('param-peaks').value = parsedConfig.numPeaks;
+        if (Number.isFinite(parsedConfig.ballDiameterCm)) document.getElementById('param-diameter').value = parsedConfig.ballDiameterCm;
+        if (Number.isFinite(parsedConfig.ballMassG)) document.getElementById('param-mass').value = parsedConfig.ballMassG;
+        if (Number.isFinite(parsedConfig.trackLengthCm)) document.getElementById('param-track-length').value = parsedConfig.trackLengthCm;
+        if (typeof parsedConfig.magnetEnabled === 'boolean') document.getElementById('param-em-toggle').checked = parsedConfig.magnetEnabled;
+      }
+
+      function persistConfig() {
+        localStorage.setItem(
+          CONFIG_STORAGE_KEY,
+          JSON.stringify({
+            timerMs: cfg.timerMs,
+            sensorDist: cfg.sensorDist,
+            magFmax: cfg.magFmax,
+            mu_r: cfg.mu_r,
+            cw: cfg.cw,
+            amplitudeCm: AMPLITUDE * 100,
+            numPeaks: NUM_PEAKS,
+            ballDiameterCm: BALL_R * 200,
+            ballMassG: BALL_M * 1000,
+            trackLengthCm: TRACK_L * 100,
+            magnetEnabled: cfg.magnetEnabled,
+          }),
+        );
       }
 
       // Attach Event Listeners to UI Elements
-      document.getElementById('btn-reset').addEventListener('click', () => {
-        state.s = R_EFF; // Start close to left border edge
+      function resetSimulation() {
+        state.s = TRACK_START_S;
         state.v = 0.0;
         magnets.forEach((m) => {
           m.active = false;
+          m.timer = 0;
           m.lockout = 0;
         });
-      });
+        updateCartesianCoordinates();
+        resetTelemetry();
+        updateTelemetry();
+      }
+
+      document.getElementById('btn-reset').addEventListener('click', resetSimulation);
 
       document.getElementById('btn-push').addEventListener('click', () => {
         state.v += 0.3; // Inject linear kinetic energy bump
       });
 
+      const geometryInputIds = ['param-amplitude', 'param-peaks', 'param-diameter', 'param-mass', 'param-track-length'];
+      ['param-amplitude', 'param-peaks', 'param-diameter', 'param-mass', 'param-track-length', 'param-timer', 'param-sensor', 'param-fmax', 'param-mur', 'param-cw', 'param-em-toggle'].forEach((id) => {
+        document.getElementById(id).addEventListener('input', () => {
+          if (syncConfigurationFromUI() && geometryInputIds.includes(id)) rebuildGeometry();
+          syncUserInterface();
+          persistConfig();
+        });
+        document.getElementById(id).addEventListener('change', () => {
+          if (syncConfigurationFromUI() && geometryInputIds.includes(id)) rebuildGeometry();
+          syncUserInterface();
+          persistConfig();
+        });
+      });
+
+      document.querySelectorAll('.tab-button').forEach((button) => {
+        button.addEventListener('click', () => {
+          document.querySelectorAll('.tab-button').forEach((tab) => tab.classList.remove('active'));
+          document.querySelectorAll('.tab-panel').forEach((panel) => panel.classList.remove('active'));
+          button.classList.add('active');
+          document.getElementById(button.dataset.tab).classList.add('active');
+        });
+      });
+
       // Master Physics Loop running at fixed timesteps for mathematical integrity
       let lastTime = performance.now();
-      const FIXED_DT = 0.002; // 2ms internal execution grid to maintain solver stability
+      const FIXED_DT = 1 / 240; // Fixed timestep documented for the solver
       let accumulator = 0.0;
 
       function loop(currentTime) {
@@ -551,11 +815,6 @@
 
         // Step physics forward in discrete micro-steps
         while (accumulator >= FIXED_DT) {
-          // Safe mapping of the global variable from the slider
-          if (window.MAG_FMAX_DYNAMIC !== undefined) {
-            // override internal parameter
-            window.MAG_FMAX = window.MAG_FMAX_DYNAMIC;
-          }
           stepSimulation(FIXED_DT);
           accumulator -= FIXED_DT;
         }
@@ -566,7 +825,12 @@
       }
 
       // Start Engine
+      restoreSavedConfig();
+      syncConfigurationFromUI();
+      rebuildGeometry();
       updateCartesianCoordinates();
+      resetTelemetry();
+      syncUserInterface();
       requestAnimationFrame(loop);
     </script>
   </body>

@@ -38,6 +38,8 @@ Die Schienenkonstruktion beschreibt im ungeneigten Zustand eine modifizierte Sin
 
 ### 2.1 Koordinatensystem
 
+Die horizontale Bahnlänge $L$ ist im Tab **Bahn** zwischen $50$ und $200\,\text{cm}$ einstellbar. Der Standardwert beträgt $100\,\text{cm}$.
+
 - Die horizontale Achse wird als $x$-Achse definiert, wobei $x$ von $0\,	ext{cm}$ (linker Rand) bis $100\,	ext{cm}$ (rechter Rand) verläuft.
 - Die vertikale Achse wird als $y$-Achse definiert. Der Nullpunkt ($y = 0$) beschreibt die vertikale Mittellinie (Symmetrieachse) der Welle.
 
@@ -67,7 +69,7 @@ Durch das Einsetzen von $numPeaks = 7$ in die Kosinusfunktion ergibt sich auf de
 2. **Im Verlauf:** Es folgen drei lokale Minima beziehungsweise Wellentäler ($y = -2\,	ext{cm}$) und zwei innere lokale Maxima beziehungsweise Wellenberge ($y = +2\,	ext{cm}$).
 3. **Bei $x = 100\,	ext{cm}$:** Die Funktion endet exakt wieder auf einem lokalen Maximum ($y = +2\,	ext{cm}$), was den **letzten halben Berg** rechts abbildet.
 
-Diese mathematische Randbedingung bildet keine mechanisch geschlossene Senke. Der nutzbare Bahnbereich für den Kugelmittelpunkt ist $R \leq x \leq L-R$. Wird dieser Bereich überschritten, verlässt die Kugel die offene Bahn; es gibt weder eine künstliche Umkehr noch einen Energieverlust durch eine numerische Randwand.
+Der nutzbare Bahnbereich für den Kugelmittelpunkt ist $R \leq x \leq L-R$. Die Schienen bilden an beiden Enden eine führende Randbegrenzung. Wird ein Endpunkt überschritten, wird die Kugel verlustfrei am Endpunkt geführt und rollt in die Bahn zurück.
 
 
 ## 3. Physik der Rollbewegung und der effektive Rollradius
@@ -115,7 +117,8 @@ $$
 Unter der Modellannahme, dass die halbe lichte Spurweite dem seitlichen Abstand der Kontaktlage entspricht, rotieren die Kontaktpunkte auf einem kleineren Kreisradius als der geometrische Außenradius ($R = 24\,	ext{mm}$) der Kugel.
 
 $$
-r_{\mathrm{eff}} = \sqrt{R^2 - \left(rac{d}{2}ight)^2}
+r_{\mathrm{eff}} = \sqrt{R^2 - \left(rac{d}{2}
+ight)^2}
 $$
 
 Für die Standardwerte ergibt sich
@@ -175,7 +178,8 @@ Erst danach wird $s_{n+1}$ über die Arc-Length-Tabelle nach $x$ umgerechnet und
 Die signierte Krümmung der Graphkurve ist
 
 $$
-\kappa(x) = rac{y''(x)}{\left(1+y'(x)^2ight)^{3/2}}.
+\kappa(x) = rac{y''(x)}{\left(1+y'(x)^2
+ight)^{3/2}}.
 $$
 
 Der zugehörige **signierte** Krümmungsradius ist
@@ -191,10 +195,16 @@ F_N = mg\cos(lpha) + rac{mv^2}{R_k}
 = mg\cos(lpha) + mv^2\kappa.
 $$
 
-In einem Tal ist der Krümmungsbeitrag positiv und erhöht die Normalkraft. Auf einem Berg ist er negativ und kann den Kontakt bei hoher Geschwindigkeit aufheben. Gilt $F_N \leq 0$, verlässt die Kugel die Schiene und wird als freier Flug weitergerechnet.
+In einem Tal ist der Krümmungsbeitrag positiv und erhöht die Normalkraft. Auf einem Berg ist er negativ. Die Bahn wird im Simulationsmodell jedoch als führende Schienenbahn behandelt: Die für Reibung verwendete Normalkraft wird auf null begrenzt,
+
+$$
+F_{N,\mathrm{eff}} = \max(0, F_N).
+$$
+
+Damit bleibt die Kugel auch bei hoher Geschwindigkeit auf der Bahn. Wird sie am rechten Hang zu langsam, wirkt die Hangabtriebskraft entgegen der bisherigen Bewegung und die Kugel rollt zurück.
 
 
-## 4. Reibung, Haftung, Luftwiderstand und offene Bahnenden
+## 4. Reibung, Haftung, Luftwiderstand und Bahnenden
 
 ### 4.1 Rollreibung und Haftreibung ($\mu_R$, $\mu_H$)
 
@@ -213,7 +223,7 @@ eq0$ wird die dynamische Rollreibung mit der aktuellen Normalkraft berechnet:
 	$$
 
 	Überschreitet die Hangabtriebskraft diese Grenze, startet die Kugel wieder. Damit entsteht kein künstliches Kriechen durch numerisches Rauschen.
-- **Kontaktbedingung:** Das Haft- und Rollreibungsmodell wird nur bei $F_N>0$ angewandt. Bei $F_N\leq0$ ist kein positiver Schienenkontakt mehr vorhanden.
+- **Kontaktbedingung:** Das Haft- und Rollreibungsmodell verwendet $F_{N,\mathrm{eff}} = \max(0,F_N)$. Die führenden Schienen halten die Kugel auf der Bahn; ein negativer rechnerischer Kontaktbeitrag beendet die Bahnsimulation nicht.
 
 ### 4.2 Luftwiderstand ($c_w$)
 
@@ -221,19 +231,21 @@ Der Luftwiderstand wirkt ebenfalls entlang der Tangente und berücksichtigt das 
 
 $$
 F_{\mathrm{Luft}}
-= -rac12ho A c_w\,v|v|,
+= -rac12
+ho A c_w\,v|v|,
 \qquad
 A = \pi R^2.
 $$
 
-Der Standardwert ist $c_w=0{,}470$; die Luftdichte bleibt $hopprox1{,}2\,	ext{mg/cm}^3$. Der Reglerbereich für $c_w$ reicht von $0{,}235$ bis $0{,}705$. Zusammen mit Gewichtskraft und Rollreibung ergibt sich
+Der Standardwert ist $c_w=0{,}470$; die Luftdichte bleibt $
+hopprox1{,}2\,	ext{mg/cm}^3$. Der Reglerbereich für $c_w$ reicht von $0{,}235$ bis $0{,}705$. Zusammen mit Gewichtskraft und Rollreibung ergibt sich
 
 $$
 F_{t,\mathrm{gesamt}}
 = F_{g,t} + F_R + F_{\mathrm{Luft}}.
 $$
 
-### 4.3 Offene Bahnenden und freier Flug
+### 4.3 Geschlossene Bahnenden
 
 Der gültige Bereich für den Kugelmittelpunkt ist
 
@@ -241,17 +253,20 @@ $$
 R \leq x \leq L-R.
 $$
 
-Beim Überschreiten eines dieser offenen Enden wird die Position auf den jeweiligen Endpunkt gesetzt und die Kugel verlässt die Bahn mit ihrer momentanen Tangentialgeschwindigkeit. Es gibt keinen Abprallfaktor und keinen künstlichen Energieverlust. Im freien Flug werden Position und Geschwindigkeit in den geneigten Weltkoordinaten mit
+Beim Überschreiten eines Endes wird die Position auf den jeweiligen Endpunkt gesetzt. Die Geschwindigkeit wird nur dann umgekehrt, wenn sie nach außen zeigt; ihr Betrag bleibt erhalten. Es gibt keinen künstlichen Energieverlust und keinen freien Flug an den Bahnenden.
 
-$$
-\dot{v}_x = 0,
-\qquad
-\dot{v}_y = -g
-$$
-
-weiterintegriert. Dasselbe Freiflugmodell wird verwendet, wenn die dynamische Normalkraft auf einem Berg $F_N\leq0$ wird.
+Die Kugel bleibt damit auch dann auf der Bahn, wenn sie den ersten oder letzten Berg nicht vollständig überwindet. In diesem Fall rollt sie am jeweiligen Endhang zurück.
 
 ### 4.4 Startbedingung, Frequenzanzeige und Speicherung
+
+Die Oberfläche ist in vier Tabs gegliedert:
+
+- **Bahn:** Horizontale Bahnlänge, Amplitude, Anzahl der Wellenberge, Kugeldurchmesser und Kugelmasse. Die Bahnlänge hat den Standardwert $100\,\text{cm}$.
+- **Dämpfung:** Rollreibung und Luftwiderstand.
+- **Magnet:** Magnet-Force, Timer, Sensorreichweite und Booster-Schalter.
+- **Telemetrie:** Aktuelle Werte sowie Min/Max-Werte seit dem letzten Reset.
+
+Die Standardwerte der interaktiven Bahn- und Kugelparameter sind Amplitude $2{,}0\,\text{cm}$, $7$ Wellenberge, Kugeldurchmesser $4{,}8\,\text{cm}$ und Kugelmasse $450\,\text{g}$. Die Magnet-Force kann von $0$ bis $10\,\text{N}$ in $0{,}1\,\text{N}$-Schritten eingestellt werden.
 
 - **Startverhalten:** Beim Reset startet die Kugel im Stillstand ($v=0$) bei $x=R$, also am nutzbaren linken Randbereich. Die Startposition wird intern als $s=s(x=R)$ gespeichert.
 - **Frequenzanzeige:** Die räumliche Wellenlänge wird entlang der Bahn aus der Gesamtbogenlänge $S$ bestimmt:
@@ -262,8 +277,8 @@ weiterintegriert. Dasselbe Freiflugmodell wird verwendet, wenn die dynamische No
 	f = rac{|v|}{\lambda_s}.
 	$$
 
-	Während des freien Flugs zeigt die Anzeige die Geschwindigkeit des freien Körpers; eine Bahnfrequenz ist dann physikalisch nicht mehr definiert.
-- **Persistenz:** Änderungen an Reibungskoeffizienten, Masse oder Geometrie werden über die `LocalStorage`-API dauerhaft gespeichert. Der Haftreibungskoeffizient $\mu_H$ ist ein fester Modellparameter und besitzt keinen Schieberegler.
+	Die Anzeige zeigt während der geführten Bewegung die aktuelle Bahngeschwindigkeit; eine Bahnfrequenz ist an den geschlossenen Bahnenden weiterhin definiert.
+- **Persistenz:** Änderungen an Reibungskoeffizienten, Masse, Kugeldurchmesser und Geometrie werden über die `LocalStorage`-API dauerhaft gespeichert. Die Min/Max-Telemetrie wird nur mit **Reset Kugel** zurückgesetzt. Der Haftreibungskoeffizient $\mu_H$ ist ein fester Modellparameter und besitzt keinen Schieberegler.
 
 Die konkreten Materialien, Maße und Literaturwerte des realen Versuchsaufbaus sind im Repository nicht durch Messprotokolle oder externe Quellen belegt. Sie sind daher als Versuchsaufbau-Annahmen beziehungsweise externe Werte zu verstehen und müssen für eine reale Validierung separat geprüft werden.
 
@@ -279,7 +294,9 @@ $$
 F_{	ext{Mag}}(x) = F_{	ext{max}} \cdot rac{r_0^4}{(x + r_0)^4}
 $$
 
-Diese Charakteristik ist empirisch auf eine effective Reichweite von $4\,	ext{cm}$ auf der waagerechten Ebene kalibriert ($F pprox 0{,}05\,	ext{N}$ bei $x = 4\,	ext{cm}$), schnellt im unmittelbaren Nahbereich vor der Spitze ($x 	o 0$) jedoch auf bis zu $22{,}5\,	ext{Newton}$ hoch.
+Diese Charakteristik ist auf eine effektive Reichweite von $4\,\text{cm}$ auf der waagerechten Ebene kalibriert ($F \approx 0{,}05\,\text{N}$ bei $x = 4\,\text{cm}$). Der interaktive Kraftregler reicht von $0$ bis $10\,\text{N}$.
+
+Die aktuelle Simulation begrenzt den einstellbaren Kraftwert auf $0$ bis $10\,\text{N}$ in $0{,}1\,\text{N}$-Schritten. Der Defaultwert beträgt $10\,\text{N}$.
 
 ### 5.2 Wired-OR Sensorsteuerung und Software-Timer
 Das Einschalten der Spulen erfolgt ortsabhängig über vorgespannte Hallsensoren, das Ausschalten zeitsynchron über einen Software-Sperrkreis:
