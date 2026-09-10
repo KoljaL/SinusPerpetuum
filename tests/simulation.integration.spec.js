@@ -7,6 +7,7 @@ const REFERENCE_CONFIG = {
   ballDiameterCm: 4.8,
   ballMassG: 450,
   trackLengthCm: 100,
+  edgeHeightRaiseMm: 0,
   muR: 0.002,
   cw: 0.47,
   magnetForceN: 10.0,
@@ -68,6 +69,7 @@ test('reference run produces continuous telemetry and preserves the energy balan
     magnetForce: 10,
     timerMs: 40,
     sensorRange: 0.04,
+    edgeHeightRaise: 0,
     magnetEnabled: true,
   });
 
@@ -88,6 +90,27 @@ test('reference run produces continuous telemetry and preserves the energy balan
 
   expect(samples.some((sample) => sample.magnets.some((magnet) => magnet.active))).toBe(true);
   expect(samples.some((sample) => sample.energy.magnetWork > 0)).toBe(true);
+});
+
+test('shared edge-height control changes only the two half-hills', async ({ page }) => {
+  await openSimulation(page);
+  const result = await page.evaluate((configuration) => {
+    const baseline = window.__simulationTest.configure(configuration);
+    const baselineGeometry = window.__simulationTest.geometry([0, 1 / 6, 1 / 3, 0.5, 2 / 3, 5 / 6, 1]);
+    const raised = window.__simulationTest.configure({ ...configuration, edgeHeightRaiseMm: 10 });
+    const raisedGeometry = window.__simulationTest.geometry([0, 1 / 6, 1 / 3, 0.5, 2 / 3, 5 / 6, 1]);
+    return { baseline, baselineGeometry, raised, raisedGeometry };
+  }, REFERENCE_CONFIG);
+
+  expect(result.baseline.config.edgeHeightRaise).toBe(0);
+  expect(result.raised.config.edgeHeightRaise).toBeCloseTo(0.01, 12);
+  expect(result.raisedGeometry[0].y - result.baselineGeometry[0].y).toBeCloseTo(0.01, 12);
+  expect(result.raisedGeometry.at(-1).y - result.baselineGeometry.at(-1).y).toBeCloseTo(0.01, 12);
+  for (const index of [1, 2, 3, 4, 5]) {
+    expect(result.raisedGeometry[index].y).toBeCloseTo(result.baselineGeometry[index].y, 12);
+    expect(result.raisedGeometry[index].slope).toBeCloseTo(result.baselineGeometry[index].slope, 12);
+    expect(result.raisedGeometry[index].secondDerivative).toBeCloseTo(result.baselineGeometry[index].secondDerivative, 12);
+  }
 });
 
 test('UI parameters map to SI configuration and reset the telemetry clock', async ({ page }) => {
