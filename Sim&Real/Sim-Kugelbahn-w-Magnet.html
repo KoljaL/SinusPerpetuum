@@ -177,7 +177,7 @@
           </div>
           <div class="control-group">
             <label><span>Luftwiderstand (c_w):</span><span id="v-cw">0.47</span></label>
-            <input type="range" id="param-cw" min="0.10" max="1.00" step="0.05" value="0.47" />
+            <input type="range" id="param-cw" min="0.10" max="1.00" step="0.01" value="0.47" />
           </div>
         </div>
 
@@ -328,6 +328,9 @@
         magnetWork: 0,
         loss: 0,
       };
+
+      let simulationTime = 0;
+      let lastStepReachedBoundary = false;
 
       // 5. Magnet Hardware & Coil State (Coil 0 and Coil 1)
       let magnets = [
@@ -565,6 +568,8 @@
       }
 
       function stepSimulation(dt) {
+        lastStepReachedBoundary = false;
+
         // 1. Process Hardware Cooldown and Cutoff Timers
         magnets.forEach((mag) => {
           if (mag.lockout > 0) mag.lockout -= dt;
@@ -615,6 +620,7 @@
         // A real open end stops the ball and removes its remaining kinetic energy.
         let reachedBoundary = state.s < TRACK_START_S || state.s > TRACK_END_S;
         if (reachedBoundary) {
+          lastStepReachedBoundary = true;
           state.s = Math.max(TRACK_START_S, Math.min(TRACK_END_S, state.s));
           energy.loss += getKineticEnergy(state.v);
           state.v = 0;
@@ -625,6 +631,7 @@
         energy.loss += Math.max(0, -(F_roll + F_air) * deltaS);
         updateCartesianCoordinates();
         energy.current = getMechanicalEnergy();
+        simulationTime += dt;
       }
       // ============================================================================
       // PART 5: CANVAS RENDERING ENGINE & ANIMATION LOOP
@@ -872,6 +879,8 @@
       function setBallAtStart() {
         state.s = BALL_INITIAL_S;
         state.v = 0.0;
+        simulationTime = 0;
+        lastStepReachedBoundary = false;
         magnets.forEach((m) => {
           m.active = false;
           m.timer = 0;
@@ -889,6 +898,89 @@
 
       function resetSimulation() {
         setBallAtStart();
+      }
+
+      function getSimulationTelemetry() {
+        const F_N_static = BALL_M * G_ACC * Math.cos(state.alpha);
+        const F_cf = state.curvRadius !== Infinity ? (BALL_M * Math.pow(state.v, 2)) / state.curvRadius : 0;
+        const currentFn = Math.max(0, F_N_static + F_cf);
+
+        return {
+          time: simulationTime,
+          state: {
+            s: state.s,
+            x: state.x,
+            y: state.y,
+            v: state.v,
+            alpha: state.alpha,
+            curvatureRadius: Number.isFinite(state.curvRadius) ? state.curvRadius : null,
+          },
+          forces: {
+            normal: currentFn,
+            centrifugal: F_cf,
+          },
+          energy: {
+            initial: energy.initial,
+            current: energy.current,
+            kinetic: getKineticEnergy(state.v),
+            potential: BALL_M * G_ACC * state.y,
+            loss: energy.loss,
+            magnetWork: energy.magnetWork,
+            balance: energy.current + energy.loss - energy.magnetWork,
+            residual: energy.current + energy.loss - energy.magnetWork - energy.initial,
+          },
+          boundaries: {
+            startS: TRACK_START_S,
+            endS: TRACK_END_S,
+            clampedThisStep: lastStepReachedBoundary,
+          },
+          magnets: magnets.map((mag) => ({
+            active: mag.active,
+            timer: mag.timer,
+            cooldown: mag.cooldown,
+            armed: mag.armed,
+            xCenter: mag.x_center,
+          })),
+          config: {
+            amplitude: AMPLITUDE,
+            peaks: NUM_PEAKS,
+            ballDiameter: BALL_R * 2,
+            ballMass: BALL_M,
+            trackLength: TRACK_L,
+            muR: cfg.mu_r,
+            cw: cfg.cw,
+            magnetForce: cfg.magFmax,
+            timerMs: cfg.timerMs,
+            sensorRange: cfg.sensorDist,
+            magnetEnabled: cfg.magnetEnabled,
+          },
+        };
+      }
+
+      function configureSimulationForTest(configuration) {
+        const inputValues = {
+          'param-amplitude': configuration.amplitudeCm,
+          'param-peaks': configuration.peaks,
+          'param-diameter': configuration.ballDiameterCm,
+          'param-mass': configuration.ballMassG,
+          'param-track-length': configuration.trackLengthCm,
+          'param-mur': configuration.muR,
+          'param-cw': configuration.cw,
+          'param-fmax': configuration.magnetForceN,
+          'param-timer': configuration.timerMs,
+          'param-sensor': configuration.sensorRangeCm,
+        };
+
+        Object.entries(inputValues).forEach(([id, value]) => {
+          if (value !== undefined) document.getElementById(id).value = value;
+        });
+        if (configuration.magnetEnabled !== undefined) document.getElementById('param-em-toggle').checked = configuration.magnetEnabled;
+
+        const geometryChanged = syncConfigurationFromUI();
+        if (geometryChanged) rebuildGeometry();
+        resetSimulation();
+        syncUserInterface();
+        return getSimulationTelemetry();
       }
 
       document.getElementById('btn-reset').addEventListener('click', resetSimulation);
@@ -924,6 +1016,7 @@
       let lastTime = performance.now();
       const FIXED_DT = 1 / 240; // Fixed timestep documented for the solver
       let accumulator = 0.0;
+      const testMode = new URLSearchParams(window.location.search).get('test') === '1';
 
       function loop(currentTime) {
         let elapsed = (currentTime - lastTime) / 1000.0;
@@ -951,7 +1044,34 @@
       updateCartesianCoordinates();
       resetTelemetry();
       syncUserInterface();
-      requestAnimationFrame(loop);
+
+      if (testMode) {
+        // Generated by Copilot
+        window.__simulationTest = {
+          configure: configureSimulationForTest,
+          reset: () => {
+            resetSimulation();
+            return getSimulationTelemetry();
+          },
+          step: (dt = FIXED_DT) => {
+            if (!Number.isFinite(dt) || dt <= 0) throw new Error('dt must be a positive finite number');
+            stepSimulation(dt);
+            return getSimulationTelemetry();
+          },
+          sample: (steps, dt = FIXED_DT) => {
+            if (!Number.isInteger(steps) || steps < 0) throw new Error('steps must be a non-negative integer');
+            const samples = [];
+            for (let index = 0; index < steps; index++) {
+              stepSimulation(dt);
+              samples.push(getSimulationTelemetry());
+            }
+            return samples;
+          },
+          snapshot: getSimulationTelemetry,
+        };
+      } else {
+        requestAnimationFrame(loop);
+      }
     </script>
   </body>
 </html>

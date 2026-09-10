@@ -12,6 +12,18 @@ ___] | | \| |__| ___] |    |___ |  \ |    |___  |  |__| |__| |  |
 
 ---
 
+## Automatisierter Simulationstest
+
+Die Browser-Simulation kann deterministisch mit Playwright und einem festen Zeitschritt von `1/240 s` geprüft werden:
+
+```bash
+npm install
+npx playwright install chromium
+npm run test:simulation
+```
+
+Der Testmodus wird nur über `?test=1` aktiviert. Er hält die Echtzeit-Animationsschleife an, setzt die Referenzparameter und erfasst Rohtelemetrie pro Simulationsschritt. Geprüft werden Energie-Bilanz, Normalkraft, Fliehkraft, Bahnbegrenzung, Magnetaktivierung und die Übernahme der UI-Parameter. Die Toleranzen berücksichtigen den numerischen Euler-Cromer-Integrationsfehler; sie ersetzen keine Messwertkalibrierung der realen Hardware.
+
 
 # Gauss-Rennbahn: Physikalisches Kugelbahn-Projekt mit Kondensator-Pufferung
 
