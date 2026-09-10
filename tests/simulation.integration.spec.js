@@ -135,6 +135,65 @@ test('UI parameters map to SI configuration and reset the telemetry clock', asyn
   expect(result.afterReset.energy.current).toBeCloseTo(result.afterReset.energy.initial, 10);
 });
 
+test('display tab controls visibility without changing simulation configuration', async ({ page }) => {
+  await openSimulation(page);
+  await page.locator('[data-tab="display-panel"]').click();
+
+  await expect(page.locator('#display-panel')).toBeVisible();
+  await expect(page.locator('#display-magnets')).toBeChecked();
+  await expect(page.locator('#display-sensors')).toBeChecked();
+
+  const before = await page.evaluate(() => window.__simulationTest.snapshot());
+  await page.locator('#display-magnets').uncheck();
+  await page.locator('#display-sensors').uncheck();
+  const after = await page.evaluate(() => window.__simulationTest.snapshot());
+  const display = await page.evaluate(() => window.__simulationTest.display());
+
+  expect(display).toMatchObject({ showMagnets: false, showSensors: false, printMode: false, printView: false });
+  expect(after.config).toMatchObject({ magnetEnabled: before.config.magnetEnabled, amplitude: before.config.amplitude, trackLength: before.config.trackLength });
+});
+
+test('display tab refreshes the formula and diagram inputs for the current track geometry', async ({ page }) => {
+  await openSimulation(page);
+  await page.locator('[data-tab="display-panel"]').click();
+
+  await page.locator('#param-track-length').evaluate((input) => {
+    input.value = '150';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await page.locator('#param-peaks').evaluate((input) => {
+    input.value = '8';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await page.locator('#param-edge-height').evaluate((input) => {
+    input.value = '10';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+
+  await expect(page.locator('#formula-parameters')).toContainText('L = 1.500 m');
+  await expect(page.locator('#formula-domain')).toContainText('0 ≤ x ≤ L (1.500 m)');
+  await expect(page.locator('#formula-edges')).toContainText('Randhöhe h_R = 10.0 mm');
+  await expect(page.locator('#formula-edges')).toContainText('Anfang y(0)');
+  await expect(page.locator('#formula-edges')).toContainText('Ende y(L)');
+  await expect(page.locator('#trackChart')).toBeVisible();
+});
+
+test('print display uses monochrome mode and keeps browser print support', async ({ page }) => {
+  await openSimulation(page);
+  await page.locator('[data-tab="display-panel"]').click();
+  await page.evaluate(() => window.dispatchEvent(new Event('beforeprint')));
+
+  const printDisplay = await page.evaluate(() => window.__simulationTest.display());
+  await page.evaluate(() => window.dispatchEvent(new Event('afterprint')));
+  const display = await page.evaluate(() => window.__simulationTest.display());
+  const styleText = await page.locator('style').first().textContent();
+
+  expect(printDisplay).toMatchObject({ printMode: true, printView: true });
+  expect(display).toMatchObject({ printMode: false, printView: false });
+  expect(styleText).toContain('@media print');
+  expect(styleText).toContain('tab-panel:not(#display-panel)');
+});
+
 test.describe('simulation parameter regressions', () => {
   const cases = [
     {

@@ -38,7 +38,7 @@
       }
       .tab-bar {
         display: grid;
-        grid-template-columns: repeat(4, 1fr);
+        grid-template-columns: repeat(5, 1fr);
         gap: 8px;
         margin-bottom: 15px;
       }
@@ -130,6 +130,125 @@
       .telemetry-table td:first-child {
         text-align: left;
       }
+      .display-panel {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+      .display-options,
+      .formula-panel,
+      .track-chart-panel {
+        border: 1px solid #3a3a4a;
+        border-radius: 6px;
+        padding: 12px;
+      }
+      .display-options {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+      .display-options label {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .formula-panel,
+      .track-chart-panel {
+        grid-column: span 2;
+      }
+      .formula-panel p {
+        margin: 6px 0;
+        font-family: monospace;
+        color: #d7d7df;
+      }
+      #trackChart {
+        width: 100%;
+        height: auto;
+        margin: 0;
+        background: #141419;
+        border: 0;
+      }
+      .print-view {
+        background: #fff;
+        color: #111;
+      }
+      .print-view .container,
+      .print-view .dashboard,
+      .print-view .display-options,
+      .print-view .formula-panel,
+      .print-view .track-chart-panel {
+        background: #fff;
+        border-color: #222;
+        box-shadow: none;
+      }
+      .print-view canvas {
+        background: #fff;
+        border-color: #222;
+      }
+      .print-view .formula-panel p {
+        color: #111;
+      }
+      @media (max-width: 760px) {
+        body {
+          margin: 8px;
+        }
+        .container {
+          padding: 10px;
+        }
+        .tab-bar {
+          grid-template-columns: repeat(2, 1fr);
+        }
+        .display-panel {
+          grid-template-columns: 1fr;
+        }
+        .formula-panel,
+        .track-chart-panel {
+          grid-column: span 1;
+        }
+      }
+      @media print {
+        @page {
+          margin: 12mm;
+        }
+        body {
+          background: #fff;
+          color: #111;
+          margin: 0;
+        }
+        .container,
+        .dashboard,
+        .display-options,
+        .formula-panel,
+        .track-chart-panel {
+          width: auto;
+          background: #fff;
+          border: 1px solid #222;
+          border-radius: 0;
+          box-shadow: none;
+        }
+        .tab-bar,
+        .btn-panel,
+        .tab-panel:not(#display-panel),
+        .display-options input,
+        .display-options button {
+          display: none !important;
+        }
+        #display-panel {
+          display: grid !important;
+        }
+        canvas,
+        #trackChart {
+          background: #fff !important;
+          border: 1px solid #222;
+        }
+        .display-options,
+        .formula-panel,
+        .track-chart-panel {
+          border: 0;
+          padding: 0;
+        }
+        .formula-panel p {
+          color: #111;
+        }
+      }
     </style>
   </head>
   <body>
@@ -145,6 +264,7 @@
           <button class="tab-button" data-tab="damping-panel" role="tab">Dämpfung</button>
           <button class="tab-button" data-tab="magnet-panel" role="tab">Magnet</button>
           <button class="tab-button" data-tab="telemetry-panel" role="tab">Telemetrie</button>
+          <button class="tab-button" data-tab="display-panel" role="tab">Darstellung</button>
         </div>
 
         <div class="tab-panel active" id="track-panel" role="tabpanel">
@@ -258,6 +378,27 @@
               </tr>
             </tbody>
           </table>
+        </div>
+
+        <div class="tab-panel display-panel" id="display-panel" role="tabpanel">
+          <div class="display-options">
+            <strong>Anzeigeoptionen</strong>
+            <label><input type="checkbox" id="display-magnets" checked /> Magnete anzeigen</label>
+            <label><input type="checkbox" id="display-sensors" checked /> Sensoren anzeigen</label>
+            <label><input type="checkbox" id="display-print-mode" /> Druckdarstellung</label>
+            <button class="btn-secondary" id="btn-print" type="button">Drucken</button>
+          </div>
+          <div class="formula-panel">
+            <strong>Bahnform</strong>
+            <p id="formula-track">y(x) = A cos(kx) + h_R q(x)</p>
+            <p id="formula-parameters"></p>
+            <p id="formula-domain"></p>
+            <p id="formula-edges"></p>
+          </div>
+          <div class="track-chart-panel">
+            <strong>Höhe über horizontaler Strecke</strong>
+            <canvas id="trackChart" width="900" height="300"></canvas>
+          </div>
         </div>
 
         <div class="btn-panel">
@@ -687,13 +828,31 @@
       const OFFSET_X = 0;
       const OFFSET_Y = 200; // Center line of the wave at Y=200px
 
+      // Generated by Copilot
+      const displayState = {
+        showMagnets: true,
+        showSensors: true,
+        printMode: false,
+      };
+      let printModeBeforeBrowserPrint = false;
+      const trackChart = document.getElementById('trackChart');
+      const trackChartCtx = trackChart.getContext('2d');
+
       function drawSimulation() {
         SCALE_X = canvas.width / TRACK_L;
+        const monochrome = displayState.printMode;
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
         // 1. Draw Wooden Support Base & Cutout Groove
-        ctx.fillStyle = '#5c4033';
-        ctx.fillRect(0, OFFSET_Y + AMPLITUDE * SCALE_Y + 15, canvas.width, 40);
+        const supportY = OFFSET_Y + AMPLITUDE * SCALE_Y + 15;
+        if (monochrome) {
+          ctx.strokeStyle = '#111';
+          ctx.lineWidth = 1;
+          ctx.strokeRect(0, supportY, canvas.width, 40);
+        } else {
+          ctx.fillStyle = '#5c4033';
+          ctx.fillRect(0, supportY, canvas.width, 40);
+        }
 
         // 2. Draw the 2 Central Electromagnets with pointed tips inside the Hills
         magnets.forEach((mag) => {
@@ -702,45 +861,59 @@
           const coilOffset = 0.04 * SCALE_X;
           const tipOffset = 0.06 * SCALE_X;
 
-          // Draw 8cm Coil Body
-          ctx.fillStyle = mag.active ? '#ff3300' : '#d97706'; // Glows red when active
-          ctx.fillRect(cx - coilOffset, cy + 5, coilOffset * 2, 25);
+          if (displayState.showMagnets) {
+            // Draw 8cm Coil Body
+            if (monochrome) {
+              ctx.strokeStyle = '#111';
+              ctx.lineWidth = 1;
+              ctx.strokeRect(cx - coilOffset, cy + 5, coilOffset * 2, 25);
+            } else {
+              ctx.fillStyle = mag.active ? '#ff3300' : '#d97706'; // Glows red when active
+              ctx.fillRect(cx - coilOffset, cy + 5, coilOffset * 2, 25);
+            }
 
-          // Draw 12mm Iron Core with 2cm pointed extensions on both ends
-          ctx.fillStyle = '#64748b';
-          ctx.beginPath();
-          // Left pointed tip
-          ctx.moveTo(cx - tipOffset, cy + 17);
-          ctx.lineTo(cx - coilOffset, cy + 10);
-          ctx.lineTo(cx + coilOffset, cy + 10);
-          // Right pointed tip
-          ctx.lineTo(cx + tipOffset, cy + 17);
-          ctx.lineTo(cx + coilOffset, cy + 25);
-          ctx.lineTo(cx - coilOffset, cy + 25);
-          ctx.closePath();
-          ctx.fill();
-
-          // Symmetrical Wired-OR Hallsensors (Small pink dots at the 4cm trigger zones)
-          ctx.fillStyle = '#ec4899';
-          ctx.beginPath();
-          ctx.arc(cx - tipOffset, OFFSET_Y - getTrackY(mag.x_center - 0.06) * SCALE_Y, 4, 0, Math.PI * 2);
-          ctx.arc(cx + tipOffset, OFFSET_Y - getTrackY(mag.x_center + 0.06) * SCALE_Y, 4, 0, Math.PI * 2);
-          ctx.fill();
-
-          // Draw dynamic magnetic force field lines if active
-          if (mag.active) {
-            ctx.strokeStyle = 'rgba(255, 51, 0, 0.3)';
-            ctx.lineWidth = 2;
+            // Draw 12mm Iron Core with 2cm pointed extensions on both ends
+            ctx.strokeStyle = monochrome ? '#111' : '#64748b';
+            ctx.fillStyle = '#64748b';
             ctx.beginPath();
-            ctx.arc(cx - tipOffset, cy + 17, 25, 0, Math.PI * 2);
-            ctx.arc(cx + tipOffset, cy + 17, 25, 0, Math.PI * 2);
-            ctx.stroke();
+            // Left pointed tip
+            ctx.moveTo(cx - tipOffset, cy + 17);
+            ctx.lineTo(cx - coilOffset, cy + 10);
+            ctx.lineTo(cx + coilOffset, cy + 10);
+            // Right pointed tip
+            ctx.lineTo(cx + tipOffset, cy + 17);
+            ctx.lineTo(cx + coilOffset, cy + 25);
+            ctx.lineTo(cx - coilOffset, cy + 25);
+            ctx.closePath();
+            if (monochrome) ctx.stroke();
+            else ctx.fill();
+
+            // Draw dynamic magnetic force field lines if active
+            if (mag.active) {
+              ctx.strokeStyle = monochrome ? '#555' : 'rgba(255, 51, 0, 0.3)';
+              ctx.lineWidth = monochrome ? 1 : 2;
+              ctx.beginPath();
+              ctx.arc(cx - tipOffset, cy + 17, 25, 0, Math.PI * 2);
+              ctx.arc(cx + tipOffset, cy + 17, 25, 0, Math.PI * 2);
+              ctx.stroke();
+            }
+          }
+
+          if (displayState.showSensors) {
+            // Symmetrical Wired-OR Hall sensors at the trigger zones
+            ctx.strokeStyle = monochrome ? '#111' : '#ec4899';
+            ctx.fillStyle = '#ec4899';
+            ctx.beginPath();
+            ctx.arc(cx - tipOffset, OFFSET_Y - getTrackY(mag.x_center - 0.06) * SCALE_Y, 4, 0, Math.PI * 2);
+            ctx.arc(cx + tipOffset, OFFSET_Y - getTrackY(mag.x_center + 0.06) * SCALE_Y, 4, 0, Math.PI * 2);
+            if (monochrome) ctx.stroke();
+            else ctx.fill();
           }
         });
 
         // 3. Draw the Sine-Wave Rails (Iron Rods)
-        ctx.strokeStyle = '#94a3b8';
-        ctx.lineWidth = 4;
+        ctx.strokeStyle = monochrome ? '#111' : '#94a3b8';
+        ctx.lineWidth = monochrome ? 1 : 4;
         ctx.beginPath();
         for (let px = 0; px <= canvas.width; px++) {
           let rx = px / SCALE_X;
@@ -757,19 +930,97 @@
         // Draw ball body above the rail.
         ctx.save();
         ctx.translate(bx, by - BALL_R * SCALE_X);
-        ctx.fillStyle = 'radial-gradient(circle at 30% 30%, #cbd5e1 0%, #475569 80%)';
-
-        // Simple steel gradient effect
-        let grad = ctx.createRadialGradient(-5, -5, 0, 0, 0, BALL_R * SCALE_X);
-        grad.addColorStop(0, '#f8fafc');
-        grad.addColorStop(0.3, '#cbd5e1');
-        grad.addColorStop(1, '#334155');
-        ctx.fillStyle = grad;
-
         ctx.beginPath();
         ctx.arc(0, 0, BALL_R * SCALE_X, 0, Math.PI * 2);
-        ctx.fill();
+        if (monochrome) {
+          ctx.strokeStyle = '#111';
+          ctx.lineWidth = 1;
+          ctx.stroke();
+        } else {
+          // Simple steel gradient effect
+          let grad = ctx.createRadialGradient(-5, -5, 0, 0, 0, BALL_R * SCALE_X);
+          grad.addColorStop(0, '#f8fafc');
+          grad.addColorStop(0.3, '#cbd5e1');
+          grad.addColorStop(1, '#334155');
+          ctx.fillStyle = grad;
+          ctx.fill();
+        }
         ctx.restore();
+      }
+
+      function updateTrackDisplay() {
+        const waveNumber = K_WAVE.toFixed(4);
+        const trackLength = TRACK_L.toFixed(3);
+        const edgeHeight = (EDGE_HEIGHT_OFFSET * 1000).toFixed(1);
+        const startHeight = (getTrackY(0) * 1000).toFixed(1);
+        const endHeight = (getTrackY(TRACK_L) * 1000).toFixed(1);
+        const edgeSpan = (TRACK_L / (NUM_PEAKS - 1)).toFixed(3);
+
+        document.getElementById('formula-track').innerText = 'y(x) = A cos(kx) + h_R q(x)';
+        document.getElementById('formula-parameters').innerText = `A = ${(AMPLITUDE * 1000).toFixed(1)} mm, k = ${waveNumber} m⁻¹, L = ${trackLength} m`;
+        document.getElementById('formula-domain').innerText = `Definitionsbereich: 0 ≤ x ≤ L (${trackLength} m), q(x) = Smoothstep an den Rändern`;
+        document.getElementById('formula-edges').innerText = `Randhöhe h_R = ${edgeHeight} mm, Anfang y(0) = ${startHeight} mm, Ende y(L) = ${endHeight} mm, Randbereich je ${edgeSpan} m`;
+
+        drawTrackChart();
+      }
+
+      function drawTrackChart() {
+        const width = trackChart.width;
+        const height = trackChart.height;
+        const margin = { left: 58, right: 20, top: 22, bottom: 42 };
+        const plotWidth = width - margin.left - margin.right;
+        const plotHeight = height - margin.top - margin.bottom;
+        const samples = 240;
+        const heights = [];
+
+        for (let index = 0; index <= samples; index++) {
+          heights.push(getTrackY((TRACK_L * index) / samples));
+        }
+
+        const maxHeight = Math.max(0.01, ...heights.map((heightValue) => Math.abs(heightValue))) * 1.15;
+        const xToPixel = (x) => margin.left + (x / TRACK_L) * plotWidth;
+        const yToPixel = (y) => margin.top + plotHeight / 2 - (y / maxHeight) * (plotHeight / 2);
+
+        trackChartCtx.clearRect(0, 0, width, height);
+        trackChartCtx.fillStyle = displayState.printMode ? '#fff' : '#141419';
+        trackChartCtx.fillRect(0, 0, width, height);
+        trackChartCtx.strokeStyle = displayState.printMode ? '#111' : '#94a3b8';
+        trackChartCtx.lineWidth = 1;
+        trackChartCtx.beginPath();
+        trackChartCtx.moveTo(margin.left, margin.top);
+        trackChartCtx.lineTo(margin.left, height - margin.bottom);
+        trackChartCtx.lineTo(width - margin.right, height - margin.bottom);
+        trackChartCtx.moveTo(margin.left, yToPixel(0));
+        trackChartCtx.lineTo(width - margin.right, yToPixel(0));
+        trackChartCtx.stroke();
+
+        trackChartCtx.strokeStyle = displayState.printMode ? '#111' : '#4a90e2';
+        trackChartCtx.lineWidth = displayState.printMode ? 1 : 2;
+        trackChartCtx.beginPath();
+        heights.forEach((heightValue, index) => {
+          const x = (TRACK_L * index) / samples;
+          const pixelX = xToPixel(x);
+          const pixelY = yToPixel(heightValue);
+          if (index === 0) trackChartCtx.moveTo(pixelX, pixelY);
+          else trackChartCtx.lineTo(pixelX, pixelY);
+        });
+        trackChartCtx.stroke();
+
+        trackChartCtx.fillStyle = displayState.printMode ? '#111' : '#d7d7df';
+        trackChartCtx.font = '14px monospace';
+        trackChartCtx.fillText('0', margin.left - 5, height - margin.bottom + 24);
+        trackChartCtx.fillText(`L = ${(TRACK_L * 100).toFixed(0)} cm`, width - 116, height - margin.bottom + 24);
+        trackChartCtx.fillText(`+${(maxHeight * 1000).toFixed(0)} mm`, 4, margin.top + 5);
+        trackChartCtx.fillText(`-${(maxHeight * 1000).toFixed(0)} mm`, 4, height - margin.bottom - 2);
+        trackChartCtx.fillText('y(x)', 8, yToPixel(0) - 6);
+      }
+
+      function setPrintMode(enabled) {
+        displayState.printMode = enabled;
+        document.getElementById('display-print-mode').checked = enabled;
+        document.body.classList.toggle('print-view', enabled);
+        drawTrackChart();
+        drawSimulation();
       }
       // ============================================================================
       // PART 6: USER INTERFACE SYNCHRONIZATION & SYSTEM INITIALIZATION
@@ -1024,7 +1275,10 @@
         if (configuration.magnetEnabled !== undefined) document.getElementById('param-em-toggle').checked = configuration.magnetEnabled;
 
         const geometryChanged = syncConfigurationFromUI();
-        if (geometryChanged) rebuildGeometry();
+        if (geometryChanged) {
+          rebuildGeometry();
+          updateTrackDisplay();
+        }
         resetSimulation();
         syncUserInterface();
         return getSimulationTelemetry();
@@ -1039,12 +1293,18 @@
       const geometryInputIds = ['param-amplitude', 'param-peaks', 'param-diameter', 'param-mass', 'param-track-length', 'param-edge-height'];
       ['param-amplitude', 'param-peaks', 'param-diameter', 'param-mass', 'param-track-length', 'param-edge-height', 'param-timer', 'param-sensor', 'param-fmax', 'param-mur', 'param-cw', 'param-em-toggle'].forEach((id) => {
         document.getElementById(id).addEventListener('input', () => {
-          if (syncConfigurationFromUI() && geometryInputIds.includes(id)) rebuildGeometry();
+          if (syncConfigurationFromUI() && geometryInputIds.includes(id)) {
+            rebuildGeometry();
+            updateTrackDisplay();
+          }
           syncUserInterface();
           persistConfig();
         });
         document.getElementById(id).addEventListener('change', () => {
-          if (syncConfigurationFromUI() && geometryInputIds.includes(id)) rebuildGeometry();
+          if (syncConfigurationFromUI() && geometryInputIds.includes(id)) {
+            rebuildGeometry();
+            updateTrackDisplay();
+          }
           syncUserInterface();
           persistConfig();
         });
@@ -1058,6 +1318,30 @@
           document.getElementById(button.dataset.tab).classList.add('active');
         });
       });
+
+      document.getElementById('display-magnets').addEventListener('change', (event) => {
+        displayState.showMagnets = event.target.checked;
+        drawSimulation();
+      });
+
+      document.getElementById('display-sensors').addEventListener('change', (event) => {
+        displayState.showSensors = event.target.checked;
+        drawSimulation();
+      });
+
+      document.getElementById('display-print-mode').addEventListener('change', (event) => {
+        setPrintMode(event.target.checked);
+      });
+
+      document.getElementById('btn-print').addEventListener('click', () => {
+        window.print();
+      });
+
+      window.addEventListener('beforeprint', () => {
+        printModeBeforeBrowserPrint = displayState.printMode;
+        setPrintMode(true);
+      });
+      window.addEventListener('afterprint', () => setPrintMode(printModeBeforeBrowserPrint));
 
       // Master Physics Loop running at fixed timesteps for mathematical integrity
       let lastTime = performance.now();
@@ -1088,6 +1372,7 @@
       restoreSavedConfig();
       syncConfigurationFromUI();
       rebuildGeometry();
+      updateTrackDisplay();
       updateCartesianCoordinates();
       resetTelemetry();
       syncUserInterface();
@@ -1121,6 +1406,7 @@
               slope: getTrackSlope(x),
               secondDerivative: getTrackSecDerivative(x),
             })),
+          display: () => ({ ...displayState, printView: document.body.classList.contains('print-view') }),
           snapshot: getSimulationTelemetry,
         };
       } else {
