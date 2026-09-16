@@ -176,6 +176,11 @@ test('display tab refreshes the formula and diagram inputs for the current track
   await expect(page.locator('#formula-edges')).toContainText('Anfang y(0)');
   await expect(page.locator('#formula-edges')).toContainText('Ende y(L)');
   await expect(page.locator('#trackChart')).toBeVisible();
+
+  const chart = await page.evaluate(() => window.__simulationTest.chart());
+  expect(chart.verticalOffset).toBeCloseTo(0.02, 12);
+  expect(chart.minHeight).toBeGreaterThanOrEqual(0);
+  expect(chart.scaleX).toBe(chart.scaleY);
 });
 
 test('print display uses monochrome mode and keeps browser print support', async ({ page }) => {
